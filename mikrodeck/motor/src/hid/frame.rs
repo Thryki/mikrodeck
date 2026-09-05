@@ -10,7 +10,11 @@ use super::protocolo::*;
 #[derive(Clone)]
 pub struct FrameLeds {
     bytes: [u8; TAM_FRAME_LEDS],
-    sujo: bool,
+    /// O último frame que foi para o aparelho. Sujo é "bytes diferentes disto":
+    /// pintar A, depois B, depois A de volta, não custa escrita. Sem esse
+    /// retrato, um `sujo` que nunca desfaz gastaria uma escrita por tique
+    /// quando a animação pinta por cima do repouso.
+    enviado: [u8; TAM_FRAME_LEDS],
 }
 
 impl Default for FrameLeds {
@@ -23,7 +27,11 @@ impl FrameLeds {
     pub fn novo() -> Self {
         let mut bytes = [0u8; TAM_FRAME_LEDS];
         bytes[0] = REPORT_LEDS;
-        Self { bytes, sujo: true }
+        // Nada foi enviado ainda: o primeiro frame é sempre sujo.
+        Self {
+            bytes,
+            enviado: [0xFF; TAM_FRAME_LEDS],
+        }
     }
 
     /// Acende um pad pelo número impresso no aparelho (1 a 16).
@@ -72,20 +80,16 @@ impl FrameLeds {
     }
 
     pub fn esta_sujo(&self) -> bool {
-        self.sujo
+        self.bytes != self.enviado
     }
 
+    /// Chamado pela thread de escrita logo depois de mandar os bytes.
     pub fn marcar_limpo(&mut self) {
-        self.sujo = false;
+        self.enviado = self.bytes;
     }
 
-    /// Escreve um byte e só marca o frame como sujo se o valor mudou de verdade.
-    /// É o que evita mandar frame igual ao anterior a cada tick.
     fn escrever(&mut self, pos: usize, valor: u8) {
-        if self.bytes[pos] != valor {
-            self.bytes[pos] = valor;
-            self.sujo = true;
-        }
+        self.bytes[pos] = valor;
     }
 }
 
@@ -132,6 +136,19 @@ mod testes {
         f.marcar_limpo();
         f.pad(5, Cor::Azul, 3);
         assert!(!f.esta_sujo(), "escrever o mesmo valor não deve sujar o frame");
+    }
+
+    #[test]
+    fn frame_nao_suja_ao_voltar_ao_valor_enviado() {
+        // Pintar A, por cima B, e A de novo: os bytes voltaram ao que foi
+        // enviado, entao nao ha escrita a fazer.
+        let mut f = FrameLeds::novo();
+        f.pad(5, Cor::Azul, 2);
+        f.marcar_limpo();
+        f.pad(5, Cor::Verde, 3);
+        assert!(f.esta_sujo());
+        f.pad(5, Cor::Azul, 2);
+        assert!(!f.esta_sujo(), "voltou ao enviado e continuou sujo");
     }
 
     #[test]

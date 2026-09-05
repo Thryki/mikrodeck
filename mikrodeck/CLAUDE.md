@@ -241,6 +241,10 @@ Documentação do protocolo em inglês, para o repositório público:
 2. Sons ao apertar.
 3. Cores alternando e animações de LED.
 4. Repositório no GitHub com a engenharia reversa
+5. Samples de audio nos pads: carregar, gravar do microfone (30 a 40 s),
+   one-shot ou enquanto apertado, envelope; plugins so bem depois.
+   Detalhes em `docs/ui-spec.md`, secao "Futuro: samples de audio". Pedido
+   explicitamente como futuro, NAO e para agora.
    (`docs/maschine-mikro-mk3-hid-protocol.md` já está escrito, em inglês).
 
 ## Estado em 2026-09-04

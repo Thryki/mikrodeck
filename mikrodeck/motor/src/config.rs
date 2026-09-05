@@ -41,6 +41,9 @@ pub struct Config {
     /// Texto que corre na tela quando o aparelho fica parado.
     #[serde(default)]
     pub descanso: Descanso,
+    /// O que a luz faz ao soltar um pad.
+    #[serde(default)]
+    pub ao_apertar: AoApertar,
 }
 
 /// Descanso de tela: depois de um tempo sem ninguém tocar no aparelho, a tela
@@ -48,9 +51,13 @@ pub struct Config {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Descanso {
     pub ativo: bool,
+    /// Texto que corre na tela. Vazio deixa a tela na página; só a luz anima.
     pub texto: String,
     /// Quanto tempo parado até começar.
     pub segundos: u64,
+    /// A luz dos pads enquanto dorme.
+    #[serde(default)]
+    pub luz: LuzDescanso,
 }
 
 impl Default for Descanso {
@@ -59,8 +66,90 @@ impl Default for Descanso {
             ativo: true,
             texto: "MikroDeck".into(),
             segundos: 90,
+            luz: LuzDescanso::default(),
         }
     }
+}
+
+/// A luz dos pads no descanso. O teto de brilho é sempre o brilho geral.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct LuzDescanso {
+    #[serde(default)]
+    pub modo: ModoLuz,
+    #[serde(default)]
+    pub ritmo: Ritmo,
+    #[serde(default)]
+    pub cor: CorLuz,
+}
+
+/// O que os pads fazem no descanso. Desenho em `docs/animacoes.md`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ModoLuz {
+    /// Nada muda nos pads.
+    Nenhuma,
+    /// A página inteira sobe e desce de brilho. É o padrão.
+    #[default]
+    Respiracao,
+    /// Um cometa percorre a borda e fecha no centro.
+    Contorno,
+    /// Uma coluna varre da esquerda para a direita e volta.
+    Colunas,
+    /// Uma gota no centro se espalha para a borda e some.
+    Pulso,
+    /// Medidor estéreo da saída de áudio.
+    Som,
+}
+
+/// Velocidade da luz. Ignorado no modo Som.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Ritmo {
+    Lento,
+    #[default]
+    Medio,
+    Rapido,
+}
+
+/// Cor da luz: automática (anda na roda, ou a cor de cada pad na Respiração)
+/// ou uma cor fixa da tabela. No JSON é `"auto"` ou o nome da cor.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum CorLuz {
+    #[default]
+    Auto,
+    Fixa(Cor),
+}
+
+impl Serialize for CorLuz {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        match self {
+            CorLuz::Auto => s.serialize_str("auto"),
+            CorLuz::Fixa(c) => s.serialize_str(nome_da_cor(*c)),
+        }
+    }
+}
+
+impl<'de> Deserialize<'de> for CorLuz {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        let nome = String::deserialize(d)?;
+        if nome == "auto" {
+            return Ok(CorLuz::Auto);
+        }
+        cor_do_nome(&nome)
+            .filter(|c| *c != Cor::Apagado)
+            .map(CorLuz::Fixa)
+            .ok_or_else(|| serde::de::Error::custom(format!("cor de luz desconhecida: {nome}")))
+    }
+}
+
+/// O que a luz faz quando um pad é solto, fora do descanso.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AoApertar {
+    Nenhuma,
+    /// O pad volta em brilho 3 e pousa no de repouso em 200 ms.
+    #[default]
+    Eco,
 }
 
 /// O que girar o knob faz. Ele não dá posição, dá passos para um lado ou para o
@@ -455,6 +544,7 @@ impl Config {
             knob: Default::default(),
             home_assistant: HomeAssistant::default(),
             descanso: Default::default(),
+            ao_apertar: Default::default(),
         }
     }
 }

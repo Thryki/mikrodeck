@@ -12,18 +12,26 @@ import {
   definirIniciaComOSistema,
   lerDiagnostico,
   lerIniciaComOSistema,
+  previsualizarDescanso,
   restaurarPadrao as restaurar,
   testarLeds as testar,
   type Diagnostico,
 } from "./ponte";
 import { escutar } from "./ponte";
+import { CORES, NOMES_CORES, rotuloDaCor } from "./cores";
 import {
   BOTOES_FISICOS,
   ROTULOS_KNOB,
+  ROTULOS_MODO_LUZ,
+  ROTULOS_RITMO,
   ROTULOS_STRIP,
+  type AoApertar,
   type Config,
+  type CorLuz,
   type FuncaoKnob,
   type FuncaoStrip,
+  type ModoLuz,
+  type Ritmo,
 } from "./tipos";
 
 interface Props {
@@ -362,6 +370,111 @@ export function Configuracoes({ config, onFechar, onSalvar }: Props) {
               </div>
             </div>
           </div>
+
+          <div className="mt-3 rounded-lg border border-neutral-200 p-3 dark:border-neutral-700">
+            <div className="mb-2 flex items-center justify-between">
+              <p className="text-[13px] font-medium">Luz dos pads</p>
+              <button onClick={() => previsualizarDescanso().catch(console.error)} className={botao}>
+                Ver agora
+              </button>
+            </div>
+            <p className="mb-2 text-xs text-neutral-500">
+              O que os 16 pads fazem enquanto o aparelho dorme. O brilho geral é o teto.
+            </p>
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className={rotulo}>Modo</label>
+                <select
+                  value={config.descanso.luz.modo}
+                  onChange={(e) =>
+                    onSalvar({
+                      ...config,
+                      descanso: {
+                        ...config.descanso,
+                        luz: { ...config.descanso.luz, modo: e.target.value as ModoLuz },
+                      },
+                    })
+                  }
+                  className={entrada}
+                >
+                  {Object.entries(ROTULOS_MODO_LUZ).map(([valor, texto]) => (
+                    <option key={valor} value={valor}>
+                      {texto}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className={rotulo}>Ritmo</label>
+                <select
+                  value={config.descanso.luz.ritmo}
+                  disabled={["nenhuma", "som"].includes(config.descanso.luz.modo)}
+                  onChange={(e) =>
+                    onSalvar({
+                      ...config,
+                      descanso: {
+                        ...config.descanso,
+                        luz: { ...config.descanso.luz, ritmo: e.target.value as Ritmo },
+                      },
+                    })
+                  }
+                  className={`${entrada} disabled:opacity-40`}
+                >
+                  {Object.entries(ROTULOS_RITMO).map(([valor, texto]) => (
+                    <option key={valor} value={valor}>
+                      {texto}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className={rotulo}>Cor</label>
+                <select
+                  value={config.descanso.luz.cor}
+                  disabled={config.descanso.luz.modo === "nenhuma"}
+                  onChange={(e) =>
+                    onSalvar({
+                      ...config,
+                      descanso: {
+                        ...config.descanso,
+                        luz: { ...config.descanso.luz, cor: e.target.value as CorLuz },
+                      },
+                    })
+                  }
+                  className={`${entrada} disabled:opacity-40`}
+                >
+                  <option value="auto">Automática</option>
+                  {NOMES_CORES.filter((n) => n !== "apagado").map((n) => (
+                    <option key={n} value={n} style={{ color: CORES[n] }}>
+                      {rotuloDaCor(n)}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+        </Secao>
+
+        <Secao titulo="Pads">
+          <label className="flex items-start gap-2 text-[13px]">
+            <input
+              type="checkbox"
+              checked={config.ao_apertar === "eco"}
+              onChange={(e) =>
+                onSalvar({
+                  ...config,
+                  ao_apertar: (e.target.checked ? "eco" : "nenhuma") as AoApertar,
+                })
+              }
+              className="mt-0.5"
+            />
+            <span>
+              Eco de luz ao soltar o pad
+              <span className="block text-xs text-neutral-500">
+                O pad volta em brilho cheio e pousa no brilho de repouso em 200 ms.
+              </span>
+            </span>
+          </label>
         </Secao>
 
         <Secao titulo="Home Assistant">

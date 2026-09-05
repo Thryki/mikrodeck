@@ -161,6 +161,24 @@ pub fn catalogo() -> Value {
                     "descanso_ativo": {"type": "boolean"},
                     "descanso_texto": {"type": "string"},
                     "descanso_segundos": {"type": "integer"},
+                    "descanso_luz_modo": {
+                        "type": "string",
+                        "enum": ["nenhuma", "respiracao", "contorno", "colunas", "pulso", "som"],
+                        "description": "o que os pads fazem no descanso"
+                    },
+                    "descanso_luz_ritmo": {
+                        "type": "string",
+                        "enum": ["lento", "medio", "rapido"]
+                    },
+                    "descanso_luz_cor": {
+                        "type": "string",
+                        "description": "auto, ou um nome de cor de listar_cores"
+                    },
+                    "ao_apertar": {
+                        "type": "string",
+                        "enum": ["nenhuma", "eco"],
+                        "description": "eco de luz ao soltar o pad"
+                    },
                     "knob": {
                         "type": "string",
                         "enum": ["nenhuma", "volume", "brilho_pads", "paginas", "rolagem"],
@@ -322,6 +340,26 @@ pub fn executar(nome: &str, argumentos: &Value) -> Result<String, String> {
             if let Some(v) = argumentos.get("descanso_segundos").and_then(Value::as_u64) {
                 c.descanso.segundos = v.max(5);
                 mudou.push(format!("descanso depois de {}s", c.descanso.segundos));
+            }
+            if let Some(v) = argumentos.get("descanso_luz_modo").and_then(Value::as_str) {
+                c.descanso.luz.modo = serde_json::from_value(json!(v))
+                    .map_err(|_| format!("modo de luz desconhecido: {v}"))?;
+                mudou.push(format!("luz {v}"));
+            }
+            if let Some(v) = argumentos.get("descanso_luz_ritmo").and_then(Value::as_str) {
+                c.descanso.luz.ritmo = serde_json::from_value(json!(v))
+                    .map_err(|_| format!("ritmo desconhecido: {v}"))?;
+                mudou.push(format!("ritmo {v}"));
+            }
+            if let Some(v) = argumentos.get("descanso_luz_cor").and_then(Value::as_str) {
+                c.descanso.luz.cor = serde_json::from_value(json!(v))
+                    .map_err(|_| format!("cor de luz desconhecida: {v}; use auto ou listar_cores"))?;
+                mudou.push(format!("cor da luz {v}"));
+            }
+            if let Some(v) = argumentos.get("ao_apertar").and_then(Value::as_str) {
+                c.ao_apertar = serde_json::from_value(json!(v))
+                    .map_err(|_| format!("ao_apertar desconhecido: {v}"))?;
+                mudou.push(format!("ao apertar {v}"));
             }
             if let Some(v) = argumentos
                 .get("home_assistant_endereco")
@@ -504,12 +542,32 @@ fn resumo(config: &Config) -> String {
         serde_json::to_string(&config.strip).unwrap_or_default(),
         if config.descanso.ativo {
             format!(
-                "\"{}\" depois de {}s",
-                config.descanso.texto, config.descanso.segundos
+                "\"{}\" depois de {}s, luz {} {} {}",
+                config.descanso.texto,
+                config.descanso.segundos,
+                serde_json::to_value(config.descanso.luz.modo)
+                    .ok()
+                    .and_then(|v| v.as_str().map(str::to_string))
+                    .unwrap_or_default(),
+                serde_json::to_value(config.descanso.luz.ritmo)
+                    .ok()
+                    .and_then(|v| v.as_str().map(str::to_string))
+                    .unwrap_or_default(),
+                serde_json::to_value(config.descanso.luz.cor)
+                    .ok()
+                    .and_then(|v| v.as_str().map(str::to_string))
+                    .unwrap_or_default(),
             )
         } else {
             "desligado".into()
         }
+    ));
+    s.push_str(&format!(
+        "Ao apertar: {}.\n",
+        serde_json::to_value(config.ao_apertar)
+            .ok()
+            .and_then(|v| v.as_str().map(str::to_string))
+            .unwrap_or_default()
     ));
     s.push_str(&format!(
         "Home Assistant: {}.\n",

@@ -40,7 +40,13 @@ function configDemo(): Config {
     home_assistant: { endereco: "", token: "" },
     calibracao_strip: { minimo: 0, maximo: 255 },
     knob: "paginas",
-    descanso: { ativo: true, texto: "MikroDeck", segundos: 90 },
+    descanso: {
+      ativo: true,
+      texto: "MikroDeck",
+      segundos: 90,
+      luz: { modo: "respiracao", ritmo: "medio", cor: "auto" },
+    },
+    ao_apertar: "eco",
   };
 }
 
@@ -107,6 +113,13 @@ export async function restaurarPadrao(): Promise<Config> {
   }
   const { invoke } = await import("@tauri-apps/api/core");
   return invoke<Config>("restaurar_padrao");
+}
+
+/** Força o descanso no aparelho agora, para ver a luz sem esperar. */
+export async function previsualizarDescanso(): Promise<void> {
+  if (!DENTRO_DO_TAURI) return;
+  const { invoke } = await import("@tauri-apps/api/core");
+  await invoke("previsualizar_descanso");
 }
 
 export async function testarLeds(): Promise<void> {

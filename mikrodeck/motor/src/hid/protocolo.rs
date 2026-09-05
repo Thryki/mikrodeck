@@ -98,7 +98,7 @@ pub const BIT_KNOB_APERTADO: usize = 39;
 /// Cores que o aparelho aceita nos pads e na touch strip.
 /// O byte final é `(cor << 2) | brilho`, com brilho de 0 a 3.
 /// Brilho 0 não apaga, é o nível mais fraco. O que apaga é o byte inteiro em zero.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u8)]
 pub enum Cor {
     Apagado = 0,

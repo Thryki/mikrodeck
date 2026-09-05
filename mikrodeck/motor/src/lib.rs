@@ -11,6 +11,7 @@ pub mod config;
 pub mod estado;
 pub mod hid;
 pub mod janelas;
+pub mod luz;
 pub mod prontas;
 pub mod rede;
 pub mod render;

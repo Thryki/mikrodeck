@@ -117,15 +117,53 @@ export interface Config {
   home_assistant: LigacaoHomeAssistant;
   calibracao_strip: CalibracaoStrip;
   knob: FuncaoKnob;
+  /** O que a luz faz ao soltar um pad. */
+  ao_apertar: AoApertar;
   descanso: Descanso;
 }
 
 /** Texto que corre na tela do aparelho depois de um tempo parado. */
 export interface Descanso {
   ativo: boolean;
+  /** Vazio deixa a tela na página; só a luz dos pads anima. */
   texto: string;
   segundos: number;
+  luz: LuzDescanso;
 }
+
+/** A luz dos pads no descanso. O teto de brilho é o brilho geral. */
+export interface LuzDescanso {
+  modo: ModoLuz;
+  ritmo: Ritmo;
+  /** "auto" ou o nome de uma cor. */
+  cor: CorLuz;
+}
+
+export type ModoLuz =
+  | "nenhuma"
+  | "respiracao"
+  | "contorno"
+  | "colunas"
+  | "pulso"
+  | "som";
+export type Ritmo = "lento" | "medio" | "rapido";
+export type CorLuz = "auto" | NomeCor;
+export type AoApertar = "nenhuma" | "eco";
+
+export const ROTULOS_MODO_LUZ: Record<ModoLuz, string> = {
+  nenhuma: "Nenhuma",
+  respiracao: "Respiração",
+  contorno: "Contorno",
+  colunas: "Colunas",
+  pulso: "Pulso",
+  som: "Som (em breve; por enquanto respira)",
+};
+
+export const ROTULOS_RITMO: Record<Ritmo, string> = {
+  lento: "Lento",
+  medio: "Médio",
+  rapido: "Rápido",
+};
 
 /** O que girar o knob faz. */
 export type FuncaoKnob =

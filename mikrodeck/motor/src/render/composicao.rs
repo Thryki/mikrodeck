@@ -57,9 +57,37 @@ impl Compositor {
         }
     }
 
-    /// Liga o descanso com um texto e uma espera. `None` desliga.
+    /// Liga o descanso com um texto e uma espera. `None` desliga. Texto vazio
+    /// não desliga: a tela fica na página e só a luz dos pads anima.
     pub fn definir_descanso(&mut self, descanso: Option<(String, Duration)>) {
-        self.descanso = descanso.filter(|(texto, _)| !texto.trim().is_empty());
+        self.descanso = descanso.map(|(texto, espera)| (texto.trim().to_string(), espera));
+    }
+
+    /// Se o aparelho está no descanso agora: parado além da espera, sem ninguém
+    /// segurando controle e sem aviso na tela. Independe de haver texto.
+    pub fn dormindo(&self) -> bool {
+        let Some((_, espera)) = &self.descanso else {
+            return false;
+        };
+        if self.segurando.is_some() {
+            return false;
+        }
+        if let Some((_, quando)) = &self.aviso {
+            if quando.elapsed() < DURACAO_AVISO {
+                return false;
+            }
+        }
+        self.ultimo_toque.elapsed() >= *espera
+    }
+
+    /// Força o descanso agora, para a pessoa ver o resultado sem esperar.
+    pub fn forcar_descanso(&mut self) {
+        if let Some((_, espera)) = &self.descanso {
+            self.ultimo_toque = Instant::now()
+                .checked_sub(*espera)
+                .unwrap_or_else(Instant::now);
+            self.aviso = None;
+        }
     }
 
     /// Marca que alguém mexeu no aparelho agora, adiando o descanso.
@@ -103,7 +131,8 @@ impl Compositor {
         }
         if let Some((texto, espera)) = &self.descanso {
             let parado = self.ultimo_toque.elapsed();
-            if parado >= *espera {
+            // Sem texto a tela fica na página; só a luz dos pads anima.
+            if !texto.is_empty() && parado >= *espera {
                 let passo = (parado - *espera).as_millis() / PASSO_DESCANSO.as_millis();
                 return Cena::Descanso {
                     texto: texto.clone(),
@@ -232,11 +261,36 @@ mod testes {
     }
 
     #[test]
-    fn texto_vazio_nao_liga_o_descanso() {
+    fn texto_vazio_deixa_a_tela_na_pagina() {
+        // Sem texto o descanso existe (a luz dos pads anima), mas a tela fica
+        // na página em vez de correr texto nenhum.
         let mut c = Compositor::novo(1, 1, "Apps".into());
         c.definir_descanso(Some(("   ".into(), Duration::from_millis(1))));
         std::thread::sleep(Duration::from_millis(20));
+        assert!(c.dormindo());
         assert!(matches!(c.cena_atual(), Cena::Pagina { .. }));
+    }
+
+    #[test]
+    fn forcar_descanso_dorme_na_hora() {
+        let mut c = Compositor::novo(1, 1, "Apps".into());
+        c.definir_descanso(Some(("MikroDeck".into(), Duration::from_secs(90))));
+        assert!(!c.dormindo());
+        c.forcar_descanso();
+        assert!(c.dormindo());
+        c.tocou();
+        assert!(!c.dormindo());
+    }
+
+    #[test]
+    fn segurar_um_controle_nao_dorme() {
+        let mut c = Compositor::novo(1, 1, "Apps".into());
+        c.definir_descanso(Some(("MikroDeck".into(), Duration::from_millis(1))));
+        std::thread::sleep(Duration::from_millis(10));
+        c.segurando(Some("Chrome".into()));
+        assert!(!c.dormindo());
+        c.segurando(None);
+        assert!(c.dormindo());
     }
 
     #[test]

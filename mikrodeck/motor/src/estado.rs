@@ -6,6 +6,7 @@
 
 use crate::acoes::{Acao, EfeitoNoEstado};
 use crate::config::{Config, Controle};
+use crate::luz::Quadro;
 use crate::vigias::Abertos;
 use crate::hid::protocolo::NUM_STRIP;
 use crate::hid::{BrilhoBotao, Cor, Evento, FrameLeds};
@@ -228,12 +229,31 @@ impl Estado {
 
     /// Pinta sem saber o que está aberto. Usado em teste e onde não há vigia.
     pub fn pintar(&self, frame: &mut FrameLeds) {
-        self.pintar_com(frame, &Abertos::default());
+        self.pintar_com(frame, &Abertos::default(), None);
+    }
+
+    /// As cores de repouso dos 16 pads, já com brilho por pad e cor de programa
+    /// aberto. É o que a Respiração e o eco usam de base.
+    pub fn quadro_de_repouso(&self, abertos: &Abertos) -> Quadro {
+        let brilho = self.config.brilho.min(3);
+        let mut q = [(Cor::Apagado, 0u8); 16];
+        for pad in 1..=16u8 {
+            if let Some(c) = self.controle(pad) {
+                q[pad as usize - 1] = (
+                    cor_do_controle(c, abertos),
+                    c.brilho.unwrap_or(brilho).min(3),
+                );
+            }
+        }
+        q
     }
 
     /// Pinta o frame de LEDs inteiro a partir do estado atual.
     /// Chamado depois de cada mudança; o frame só fica sujo se algo mudou de verdade.
-    pub fn pintar_com(&self, frame: &mut FrameLeds, abertos: &Abertos) {
+    ///
+    /// `luz` é o quadro da animação, se houver: ele pinta os pads no lugar das
+    /// cores de repouso, e a strip cai para o fraco. Botões não animam.
+    pub fn pintar_com(&self, frame: &mut FrameLeds, abertos: &Abertos, luz: Option<&Quadro>) {
         if self.pausado {
             frame.limpar();
             // Deixa só o botão de retomar aceso, senão o aparelho fica sem pista
@@ -244,16 +264,18 @@ impl Estado {
         let brilho = self.config.brilho.min(3);
 
         for pad in 1..=16u8 {
-            let (cor, b) = match self.controle(pad) {
-                Some(c) if self.apertados.contains(&pad) => {
+            let (cor, b) = match (luz, self.controle(pad)) {
+                // Pad apertado sempre mostra o aperto, animação ou não.
+                (_, Some(c)) if self.apertados.contains(&pad) => {
                     (c.cor_pressionado.unwrap_or(Cor::Branco), 3)
                 }
+                (Some(q), _) => q[pad as usize - 1],
                 // O brilho do próprio pad ganha do geral, quando existe.
-                Some(c) => (
+                (None, Some(c)) => (
                     cor_do_controle(c, abertos),
                     c.brilho.unwrap_or(brilho).min(3),
                 ),
-                None => (Cor::Apagado, 0),
+                (None, None) => (Cor::Apagado, 0),
             };
             frame.pad(pad, cor, b);
         }
@@ -271,8 +293,10 @@ impl Estado {
         // dela é azul de fábrica, então só a quantidade acesa carrega informação.
         if let Some(nivel) = self.nivel_strip {
             let acesos = (nivel * NUM_STRIP as f32).round() as usize;
+            // Com a luz animando, a strip cai para o fraco e segue mostrando o nível.
+            let brilho_strip = if luz.is_some() { 0 } else { brilho.max(1) };
             for i in 0..NUM_STRIP {
-                let b = if i < acesos { brilho.max(1) } else { 0 };
+                let b = if i < acesos { brilho_strip } else { 0 };
                 let cor = if i < acesos { Cor::Azul } else { Cor::Apagado };
                 frame.strip(i, cor, b);
             }
@@ -386,6 +410,7 @@ mod testes {
             knob: Default::default(),
             home_assistant: Default::default(),
             descanso: Default::default(),
+            ao_apertar: Default::default(),
         }
     }
 

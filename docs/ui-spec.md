@@ -339,3 +339,42 @@ pagina. Trocar a escolha libera o antigo na hora.
 - Calibracao da touch strip em Configuracoes (minimo e maximo alcancaveis).
 - Painel do MCP generico: caminho, comando de terminal e bloco JSON.
 - Arrastar e soltar entre pads e entre botoes, com modal de substituir/trocar.
+
+
+## Futuro: samples de audio nos pads (pedido em 2026-09-04, NAO e para agora)
+
+O Davi quer, mais adiante, o pad tocar audio. Anotado com as palavras dele,
+para entrar do jeito certo quando chegar a hora.
+
+### Tocar um sample
+
+- Nova acao no pad: **carregar um sample**. A pessoa escolhe o arquivo de
+  audio; toda vez que aperta, o sample toca.
+- Dois modos de disparo, a escolher por pad:
+  - **apertou, toca ate o fim** (one-shot);
+  - **toca enquanto estiver apertado** (gate: solta, para).
+- Um **envelope** simples por sample: ataque, sustain, release ("e tudo mais").
+
+### Gravar um sample
+
+- Opcao de **gravar** direto no pad: escolhe o microfone nas configuracoes,
+  aperta gravar, capta uns segundos.
+- Limite curto de proposito: **uns 30 a 40 segundos**, no maximo um minuto.
+  O audio fica guardado e passa a tocar a cada aperto.
+
+### Plugins (bem depois)
+
+- Nas configuracoes, **escanear a lista de plugins** instalados.
+- No sample, um botao para adicionar **ate quatro plugins** em cadeia
+  (reverb, equalizador...).
+
+### Notas tecnicas para quando for fazer
+
+- Saida de audio: WASAPI em modo compartilhado, mixando com o resto do
+  sistema; o motor ja tem Core Audio aberto em `audio.rs`.
+- Entrada: enumerar dispositivos de captura (`eCapture`) para o seletor de
+  microfone; gravar em WAV, sem compressao, em `~/.mikrodeck/samples/`.
+- Latencia: o disparo precisa vir do caminho pad -> hid -> estado, sem passar
+  pela interface, como toda acao.
+- Plugins: VST3 ou CLAP exige hospedar o plugin no processo; e um projeto por
+  si so. Fica para depois de tudo o mais, como o proprio Davi disse.

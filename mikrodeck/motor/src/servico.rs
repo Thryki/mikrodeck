@@ -9,6 +9,7 @@ use crate::audio::Volume;
 use crate::config::{Config, FuncaoKnob, FuncaoStrip};
 use crate::estado::{Estado, Reacao};
 use crate::janelas;
+use crate::luz::{Animador, Quadro};
 use crate::vigias::Abertos;
 use crate::hid::{Aparelho, Evento};
 use crate::render::composicao::Compositor;
@@ -61,12 +62,14 @@ impl Servico {
         let situacao = Arc::new(Mutex::new(Situacao::Procurando));
         let rodando = Arc::new(AtomicBool::new(true));
         let teste_pedido = Arc::new(AtomicBool::new(false));
+        let descanso_pedido = Arc::new(AtomicBool::new(false));
 
         let supervisor = {
             let estado = estado.clone();
             let situacao = situacao.clone();
             let rodando = rodando.clone();
             let teste_pedido = teste_pedido.clone();
+            let descanso_pedido = descanso_pedido.clone();
             let avisar = Arc::new(avisar);
             thread::Builder::new()
                 .name("mikrodeck-supervisor".into())
@@ -90,6 +93,7 @@ impl Servico {
                                     &executor,
                                     &rodando,
                                     &teste_pedido,
+                                    &descanso_pedido,
                                     volume.as_ref(),
                                     &abertos,
                                     avisar.as_ref(),
@@ -167,14 +171,23 @@ fn laco_de_eventos<F>(
     executor: &Executor,
     rodando: &Arc<AtomicBool>,
     teste_pedido: &Arc<AtomicBool>,
+    descanso_pedido: &Arc<AtomicBool>,
     volume: Option<&Volume>,
     abertos: &Abertos,
     avisar: &F,
 ) where
     F: Fn(Aviso) + Send + Sync + ?Sized,
 {
+    // A luz dos pads no descanso e o eco ao soltar.
+    let mut animador = {
+        let e = travar(estado);
+        Animador::novo(e.config().descanso.luz, e.config().ao_apertar)
+    };
+    // Quantos tiques rápidos já passaram, para ler o volume a cada quatro.
+    let mut tiques_rapidos: u32 = 0;
+
     // Pinta o estado inicial assim que conecta.
-    repintar(aparelho, estado, abertos);
+    repintar(aparelho, estado, abertos, None);
 
     // Pad que cuida da janela: qual, o que ele abre, e desde quando está apertado.
     let mut segurando_janela: Option<(u8, AlvoDoPad, Instant)> = None;
@@ -198,23 +211,38 @@ fn laco_de_eventos<F>(
         if teste_pedido.swap(false, Ordering::Relaxed) {
             acender_tudo(aparelho);
         }
+        if descanso_pedido.swap(false, Ordering::Relaxed) {
+            compositor.forcar_descanso();
+        }
         // Timeout curto para o encerramento não ficar preso esperando evento.
-        let evento = match eventos.recv_timeout(Duration::from_millis(100)) {
+        // Dormindo ou em eco, o laço acelera para 25 ms; no resto, 100 ms bastam.
+        let rapido = animador.precisa_de_tique();
+        let espera = Duration::from_millis(if rapido { 25 } else { 100 });
+        let evento = match eventos.recv_timeout(espera) {
             Ok(e) => e,
             Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                // O volume é uma chamada COM: no ritmo rápido, uma a cada quatro.
+                tiques_rapidos = tiques_rapidos.wrapping_add(1);
+                if !rapido || tiques_rapidos % 4 == 0 {
+                    atualizar_nivel_strip(estado, volume);
+                }
+                // O descanso e a luz podem ter mudado pela interface ou pelo MCP.
+                let pausado = esta_pausado(estado);
+                let (brilho, repouso) = {
+                    let e = travar(estado);
+                    compositor.definir_descanso(descanso_da_config(&e));
+                    animador.configurar(e.config().descanso.luz, e.config().ao_apertar);
+                    (e.config().brilho, e.quadro_de_repouso(abertos))
+                };
+                let dormindo = compositor.dormindo() && !pausado;
+                animador.tique(Instant::now(), dormindo, brilho, &repouso, None);
                 // Repinta mesmo sem evento: a config pode ter mudado pela interface
                 // (brilho, cor, página) e ninguém encostou no aparelho. O frame só
                 // vai para o aparelho se algum byte mudou de verdade.
-                atualizar_nivel_strip(estado, volume);
-                repintar(aparelho, estado, abertos);
-                // O descanso pode ter sido ligado ou desligado pela interface.
-                {
-                    let e = travar(estado);
-                    compositor.definir_descanso(descanso_da_config(&e));
-                }
+                repintar(aparelho, estado, abertos, animador.quadro());
                 // A tela também precisa do tick: o aviso passageiro some sozinho e
                 // o texto do descanso anda a cada quadro.
-                atualizar_tela(aparelho, &mut compositor, esta_pausado(estado));
+                atualizar_tela(aparelho, &mut compositor, pausado);
                 continue;
             }
             Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => return,
@@ -275,8 +303,10 @@ fn laco_de_eventos<F>(
 
         // A tela mostra o nome do que está sendo segurado.
         {
-            // Qualquer evento do aparelho adia o descanso.
+            // Qualquer evento do aparelho adia o descanso, e acorda a luz com
+            // corte seco: quem apertou quer o pad agora.
             compositor.tocou();
+            animador.acordar();
             let e = travar(estado);
             match &evento {
                 // Encostar de leve já mostra o nome na tela, sem executar nada.
@@ -284,7 +314,10 @@ fn laco_de_eventos<F>(
                 Evento::PadTocado { pad, .. } | Evento::PadApertado { pad, .. } => {
                     compositor.segurando(e.nome_do_pad(*pad).map(str::to_string))
                 }
-                Evento::PadSolto { .. } => compositor.segurando(None),
+                Evento::PadSolto { pad } => {
+                    compositor.segurando(None);
+                    animador.eco(*pad, Instant::now());
+                }
                 Evento::Botao { nome, apertado } => {
                     if *apertado {
                         compositor.segurando(e.nome_do_botao(nome).map(str::to_string));
@@ -337,7 +370,7 @@ fn laco_de_eventos<F>(
                         ultimo_toque.insert(*pad, Instant::now());
                         // O estado ainda precisa saber que soltou, para o LED voltar.
                         let _ = travar(estado).processar(&evento);
-                        repintar(aparelho, estado, abertos);
+                        repintar(aparelho, estado, abertos, animador.quadro());
                         atualizar_tela(aparelho, &mut compositor, esta_pausado(estado));
                         continue;
                     }
@@ -389,7 +422,14 @@ fn laco_de_eventos<F>(
         }
 
         atualizar_nivel_strip(estado, volume);
-        repintar(aparelho, estado, abertos);
+        {
+            let (brilho, repouso) = {
+                let e = travar(estado);
+                (e.config().brilho, e.quadro_de_repouso(abertos))
+            };
+            animador.tique(Instant::now(), false, brilho, &repouso, None);
+        }
+        repintar(aparelho, estado, abertos, animador.quadro());
         atualizar_tela(aparelho, &mut compositor, esta_pausado(estado));
     }
 }
@@ -617,7 +657,12 @@ fn apagar_tela(aparelho: &Aparelho) {
     aparelho.desenhar(|tela| tela.limpar());
 }
 
-fn repintar(aparelho: &Aparelho, estado: &Arc<Mutex<Estado>>, abertos: &Abertos) {
+fn repintar(
+    aparelho: &Aparelho,
+    estado: &Arc<Mutex<Estado>>,
+    abertos: &Abertos,
+    luz: Option<&Quadro>,
+) {
     let e = travar(estado);
-    aparelho.pintar(|f| e.pintar_com(f, abertos));
+    aparelho.pintar(|f| e.pintar_com(f, abertos, luz));
 }
