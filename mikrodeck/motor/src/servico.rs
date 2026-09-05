@@ -49,6 +49,7 @@ pub struct Servico {
     rodando: Arc<AtomicBool>,
     /// Pedido de teste de LEDs vindo da interface. O laço atende no próximo tick.
     teste_pedido: Arc<AtomicBool>,
+    descanso_pedido: Arc<AtomicBool>,
     supervisor: Option<thread::JoinHandle<()>>,
 }
 
@@ -117,6 +118,7 @@ impl Servico {
             situacao,
             rodando,
             teste_pedido,
+            descanso_pedido,
             supervisor: Some(supervisor),
         }
     }
@@ -146,6 +148,11 @@ impl Servico {
     pub fn ir_para_pagina(&self, numero: usize) {
         let mut e = travar(&self.estado);
         e.ir_para_pagina(numero);
+    }
+
+    /// Força o descanso agora, para a pessoa ver a luz sem esperar a espera toda.
+    pub fn previsualizar_descanso(&self) {
+        self.descanso_pedido.store(true, Ordering::Relaxed);
     }
 
     /// Pede um teste visual: acende tudo por um instante e volta ao normal.
@@ -187,7 +194,7 @@ fn laco_de_eventos<F>(
     let mut tiques_rapidos: u32 = 0;
 
     // Pinta o estado inicial assim que conecta.
-    repintar(aparelho, estado, abertos, None);
+    repintar(aparelho, estado, abertos, None, false);
 
     // Pad que cuida da janela: qual, o que ele abre, e desde quando está apertado.
     let mut segurando_janela: Option<(u8, AlvoDoPad, Instant)> = None;
@@ -239,7 +246,7 @@ fn laco_de_eventos<F>(
                 // Repinta mesmo sem evento: a config pode ter mudado pela interface
                 // (brilho, cor, página) e ninguém encostou no aparelho. O frame só
                 // vai para o aparelho se algum byte mudou de verdade.
-                repintar(aparelho, estado, abertos, animador.quadro());
+                repintar(aparelho, estado, abertos, animador.quadro(), animador.dormindo());
                 // A tela também precisa do tick: o aviso passageiro some sozinho e
                 // o texto do descanso anda a cada quadro.
                 atualizar_tela(aparelho, &mut compositor, pausado);
@@ -316,7 +323,12 @@ fn laco_de_eventos<F>(
                 }
                 Evento::PadSolto { pad } => {
                     compositor.segurando(None);
-                    animador.eco(*pad, Instant::now());
+                    // Só ecoa o que foi apertado de verdade. O aparelho manda
+                    // `PadSolto` também quando o dedo só encostou, e piscar num
+                    // toque leve contradiz "toque leve não executa".
+                    if e.esta_apertado(*pad) {
+                        animador.eco(*pad, Instant::now());
+                    }
                 }
                 Evento::Botao { nome, apertado } => {
                     if *apertado {
@@ -370,7 +382,7 @@ fn laco_de_eventos<F>(
                         ultimo_toque.insert(*pad, Instant::now());
                         // O estado ainda precisa saber que soltou, para o LED voltar.
                         let _ = travar(estado).processar(&evento);
-                        repintar(aparelho, estado, abertos, animador.quadro());
+                        repintar(aparelho, estado, abertos, animador.quadro(), animador.dormindo());
                         atualizar_tela(aparelho, &mut compositor, esta_pausado(estado));
                         continue;
                     }
@@ -429,7 +441,7 @@ fn laco_de_eventos<F>(
             };
             animador.tique(Instant::now(), false, brilho, &repouso, None);
         }
-        repintar(aparelho, estado, abertos, animador.quadro());
+        repintar(aparelho, estado, abertos, animador.quadro(), animador.dormindo());
         atualizar_tela(aparelho, &mut compositor, esta_pausado(estado));
     }
 }
@@ -662,7 +674,8 @@ fn repintar(
     estado: &Arc<Mutex<Estado>>,
     abertos: &Abertos,
     luz: Option<&Quadro>,
+    dormindo: bool,
 ) {
     let e = travar(estado);
-    aparelho.pintar(|f| e.pintar_com(f, abertos, luz));
+    aparelho.pintar(|f| e.pintar_com(f, abertos, luz, dormindo));
 }

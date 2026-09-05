@@ -166,6 +166,15 @@ fn testar_leds(motor: State<'_, MotorVivo>) -> Result<(), String> {
     Ok(())
 }
 
+/// Força o descanso no aparelho agora, para ver a luz dos pads sem esperar.
+#[tauri::command]
+fn previsualizar_descanso(motor: State<'_, MotorVivo>) -> Result<(), String> {
+    let guarda = motor.0.lock().map_err(|e| e.to_string())?;
+    let servico = guarda.as_ref().ok_or("motor não iniciado")?;
+    servico.previsualizar_descanso();
+    Ok(())
+}
+
 /// Páginas prontas que a pessoa pode adicionar com um clique.
 #[tauri::command]
 fn paginas_prontas() -> Vec<motor::prontas::Pronta> {
@@ -338,6 +347,7 @@ pub fn run() {
             restaurar_padrao,
             abrir_pasta_config,
             testar_leds,
+            previsualizar_descanso,
             ler_inicia_com_o_sistema,
             definir_inicia_com_o_sistema,
             caminho_do_mcp,

@@ -82,9 +82,16 @@ impl Animador {
         }
     }
 
-    /// Dormindo ou eco em curso: o laço acelera para 25 ms.
+    /// Se o descanso está animando os pads agora. É o que faz a touch strip cair
+    /// para o fraco: no eco, que acontece acordado, ela não pode piscar.
+    pub fn dormindo(&self) -> bool {
+        self.inicio.is_some() && self.luz.modo != ModoLuz::Nenhuma
+    }
+
+    /// O laço acelera para 25 ms só quando há o que animar. Com o modo `Nenhuma`
+    /// não há quadro nenhum, e acordar 40 vezes por segundo seria CPU à toa.
     pub fn precisa_de_tique(&self) -> bool {
-        self.inicio.is_some() || self.eco.is_some()
+        self.dormindo() || self.eco.is_some()
     }
 
     /// Modo Som e dormindo: o laço lê o medidor. O modo Som ainda cai na
@@ -179,9 +186,10 @@ impl Animador {
                 let periodo = periodo_ms(self.luz.ritmo);
                 let t = (passado - ADORMECER).as_millis() as u64;
                 let numero = t / periodo;
-                // Os quadros do pulso andam no passo mínimo; o resto do período é
-                // espera, em que `pulso` devolve None e o quadro fica apagado.
-                let quadro = (t % periodo) / PASSO_MINIMO.as_millis() as u64;
+                // Os quadros do pulso andam no passo do ritmo, não no passo mínimo:
+                // no médio são 5 quadros em 1,25 s, como o desenho pede. O resto do
+                // período é espera, em que `pulso` devolve None e o quadro apaga.
+                let quadro = (t % periodo) / passo_ms(self.luz.ritmo).max(1);
                 Some(modos::pulso(quadro, brilho, cor, numero).unwrap_or_else(modos::vazio))
             }
             ModoLuz::Som => None,
@@ -291,6 +299,45 @@ mod testes {
         let n = quadros_em_10s(ModoLuz::Respiracao, Ritmo::Medio, 2);
         assert!((5..=15).contains(&n), "{n}");
         assert_eq!(quadros_em_10s(ModoLuz::Respiracao, Ritmo::Medio, 0), 1, "brilho 0 e fraco parado");
+    }
+
+    #[test]
+    fn modo_nenhuma_nao_acelera_o_laco() {
+        // Sem quadro para animar, acordar 40 vezes por segundo seria CPU a toa.
+        let mut a = Animador::novo(luz(ModoLuz::Nenhuma, Ritmo::Medio), AoApertar::Nenhuma);
+        let t0 = Instant::now();
+        a.tique(t0, true, 2, &pagina(), None);
+        assert!(!a.precisa_de_tique());
+        assert!(!a.dormindo());
+    }
+
+    #[test]
+    fn o_eco_nao_conta_como_descanso() {
+        // A strip so escurece dormindo; no eco ela nao pode piscar.
+        let mut a = Animador::novo(luz(ModoLuz::Nenhuma, Ritmo::Medio), AoApertar::Eco);
+        let t0 = Instant::now();
+        a.eco(1, t0);
+        a.tique(t0, false, 2, &pagina(), None);
+        assert!(a.quadro().is_some());
+        assert!(!a.dormindo(), "eco nao e descanso");
+        assert!(a.precisa_de_tique(), "mas o laco precisa correr para o eco pousar");
+    }
+
+    #[test]
+    fn pulso_anda_no_passo_do_ritmo() {
+        // No medio o passo e 250 ms: cinco quadros em 1,25 s, como o desenho pede.
+        let mut a = Animador::novo(luz(ModoLuz::Pulso, Ritmo::Medio), AoApertar::Nenhuma);
+        let t0 = Instant::now();
+        let repouso = pagina();
+        // Passa o adormecer (750 ms) e mede quando o quadro muda.
+        let mut trocas = 0;
+        for ms in (750..2000).step_by(25) {
+            if a.tique(t0 + Duration::from_millis(ms), true, 2, &repouso, None) {
+                trocas += 1;
+            }
+        }
+        // Cinco quadros de pulso em 1,25 s, e nao dez.
+        assert!((4..=6).contains(&trocas), "{trocas} trocas em 1,25 s");
     }
 
     #[test]

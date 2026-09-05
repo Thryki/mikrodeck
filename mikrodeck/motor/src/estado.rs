@@ -229,7 +229,12 @@ impl Estado {
 
     /// Pinta sem saber o que está aberto. Usado em teste e onde não há vigia.
     pub fn pintar(&self, frame: &mut FrameLeds) {
-        self.pintar_com(frame, &Abertos::default(), None);
+        self.pintar_com(frame, &Abertos::default(), None, false);
+    }
+
+    /// Se este pad está apertado agora.
+    pub fn esta_apertado(&self, pad: u8) -> bool {
+        self.apertados.contains(&pad)
     }
 
     /// As cores de repouso dos 16 pads, já com brilho por pad e cor de programa
@@ -253,7 +258,13 @@ impl Estado {
     ///
     /// `luz` é o quadro da animação, se houver: ele pinta os pads no lugar das
     /// cores de repouso, e a strip cai para o fraco. Botões não animam.
-    pub fn pintar_com(&self, frame: &mut FrameLeds, abertos: &Abertos, luz: Option<&Quadro>) {
+    pub fn pintar_com(
+        &self,
+        frame: &mut FrameLeds,
+        abertos: &Abertos,
+        luz: Option<&Quadro>,
+        dormindo: bool,
+    ) {
         if self.pausado {
             frame.limpar();
             // Deixa só o botão de retomar aceso, senão o aparelho fica sem pista
@@ -262,6 +273,17 @@ impl Estado {
             return;
         }
         let brilho = self.config.brilho.min(3);
+
+        // Apaga botões e strip antes de pintar. Sem isso, o que foi aceso e
+        // depois deixou de ser pintado fica aceso para sempre: botão programado
+        // numa página some ao trocar de página, e o teste de LEDs deixaria os 39
+        // botões acesos. Reescrever o mesmo byte não custa escrita.
+        for nome in crate::hid::protocolo::BOTOES {
+            frame.botao(nome, BrilhoBotao::Apagado);
+        }
+        for i in 0..NUM_STRIP {
+            frame.strip(i, Cor::Apagado, 0);
+        }
 
         for pad in 1..=16u8 {
             let (cor, b) = match (luz, self.controle(pad)) {
@@ -293,8 +315,9 @@ impl Estado {
         // dela é azul de fábrica, então só a quantidade acesa carrega informação.
         if let Some(nivel) = self.nivel_strip {
             let acesos = (nivel * NUM_STRIP as f32).round() as usize;
-            // Com a luz animando, a strip cai para o fraco e segue mostrando o nível.
-            let brilho_strip = if luz.is_some() { 0 } else { brilho.max(1) };
+            // Só no descanso a strip cai para o fraco. No eco, que acontece
+            // acordado, ela não pode piscar a cada pad solto.
+            let brilho_strip = if dormindo { 0 } else { brilho.max(1) };
             for i in 0..NUM_STRIP {
                 let b = if i < acesos { brilho_strip } else { 0 };
                 let cor = if i < acesos { Cor::Azul } else { Cor::Apagado };
@@ -545,6 +568,50 @@ mod testes {
         let mut frame = FrameLeds::novo();
         estado.pintar(&mut frame);
         assert_eq!(frame.bytes().len(), 81);
+    }
+
+    #[test]
+    fn pintar_apaga_botao_que_deixou_de_ser_pintado() {
+        // O teste de LEDs acende os 39 botoes. Se `pintar_com` nao apagasse o que
+        // nao pinta, eles ficariam acesos para sempre.
+        let estado = Estado::novo(config_de_teste());
+        let mut frame = FrameLeds::novo();
+        for nome in crate::hid::protocolo::BOTOES {
+            frame.botao(nome, BrilhoBotao::Forte);
+        }
+        estado.pintar(&mut frame);
+        let pos = posicao_do_botao("solo");
+        assert_eq!(
+            frame.bytes()[pos],
+            BrilhoBotao::Apagado as u8,
+            "botao sem funcao continuou aceso"
+        );
+        // E o que tem funcao de fabrica segue aceso.
+        assert_eq!(
+            frame.bytes()[posicao_do_botao(BOTAO_PAUSAR)],
+            BrilhoBotao::Fraco as u8
+        );
+    }
+
+    #[test]
+    fn a_strip_so_escurece_no_descanso() {
+        let mut estado = Estado::novo(config_de_teste());
+        estado.definir_nivel_strip(Some(1.0));
+        let inicio = crate::hid::protocolo::OFFSET_STRIP;
+
+        // Acordado, com um quadro de eco: a strip fica no brilho normal.
+        let quadro = [(Cor::Azul, 2u8); 16];
+        let mut frame = FrameLeds::novo();
+        estado.pintar_com(&mut frame, &Abertos::default(), Some(&quadro), false);
+        let aceso_acordado = frame.bytes()[inicio];
+
+        // Dormindo: cai para o fraco.
+        let mut frame = FrameLeds::novo();
+        estado.pintar_com(&mut frame, &Abertos::default(), Some(&quadro), true);
+        assert_ne!(
+            frame.bytes()[inicio], aceso_acordado,
+            "a strip devia escurecer so no descanso"
+        );
     }
 
     #[test]

@@ -270,6 +270,38 @@ src-tauri gera binario apontando para o servidor de desenvolvimento.** O
 certo e sempre `npm run tauri build`. E antes de buildar, derrubar
 `mikrodeck-mcp.exe`, senao o arquivo em `target/release` fica travado.
 
+## Rodada de 2026-09-05: luz dos pads e README
+
+- `docs/animacoes.md`: desenho fechado por painel (3 propostas, 2 juizes).
+  Cinco modos mais "nenhuma": Respiracao (padrao), Contorno (a lista do Davi),
+  Colunas, Pulso e Som. Som ainda cai na Respiracao; falta o medidor.
+- Modulo `motor/src/luz/`: `Animador` puro, recebe `Instant` e devolve `Quadro`.
+  Orcamento de escritas provado por teste com relogio falso, teto de 8 quadros
+  por segundo em todo modo x ritmo x brilho.
+- `hid/frame.rs` guarda `enviado`: sujo virou "bytes diferentes do ultimo
+  enviado". Sem isso, pintar o repouso e por cima a animacao gastaria uma
+  escrita por tique com bytes iguais.
+- Cinco bugs achados na revisao e consertados, com teste cada:
+  1. A strip escurecia no eco, nao so no descanso. Piscava a cada pad solto.
+  2. Pulso andava no passo minimo (125 ms) em vez do passo do ritmo (250 ms).
+  3. Modo `nenhuma` mantinha o laco a 25 ms sem ter o que animar.
+  4. Toque leve disparava o eco: `PadSolto` chega tambem sem aperto.
+  5. `pintar_com` nunca apagava botao que deixou de ser pintado. "Testar LEDs"
+     deixava os 39 botoes acesos para sempre, e botao de outra pagina ficava
+     aceso ao trocar de pagina. Agora apaga botoes e strip antes de pintar.
+- README novo, escrito por painel (3 redatores, 2 juizes, 36,25/40): indice,
+  prints da interface em `docs/imagens/`, o que o app faz de verdade, secao
+  de conviver com o Maschine 2, e como ajudar. Prints tirados com Playwright
+  contra o servidor de desenvolvimento (`scripts/prints-readme.js`).
+- Repositorio no ar: https://github.com/Thryki/mikrodeck, privado.
+  `gh` 2.100 instalado, sem login ainda; o push usa a credencial do Git.
+
+### Nao verificado no aparelho
+
+A luz dos pads passa nos 130 testes mas **nao foi confirmada por foto**: a
+webcam saiu de posicao. Quando voltar, apontar para o aparelho e conferir
+Respiracao, Contorno, Colunas, Pulso e o eco com `scripts/mede.js`.
+
 ## Próximos passos, em ordem
 
 1. Funções padrão nos três botões da esquerda: ligar/desligar, favoritos, busca do sistema.
