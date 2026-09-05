@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<title>MikroDeck · mockup tela principal v1</title>
+<style>
+:root{--surface-2:#fff;--surface-1:#f4f3ef;--border:#d9d7cf;--text-primary:#1f1f1e;--text-secondary:#5f5e5a;--text-muted:#888780;--text-success:#3b6d11;--bg-accent:#e6f1fb;--text-accent:#185fa5;--fill-primary:#1f1f1e;--on-primary:#fff;--radius:8px}
+@media (prefers-color-scheme:dark){:root{--surface-2:#1f1f1e;--surface-1:#2a2a28;--border:#3d3d3b;--text-primary:#f1efe8;--text-secondary:#b4b2a9;--text-muted:#888780;--text-success:#97c459;--bg-accent:#0c447c;--text-accent:#b5d4f4;--fill-primary:#f1efe8;--on-primary:#1f1f1e}}
+body{margin:0;padding:24px;background:var(--surface-1);color:var(--text-primary);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;font-size:14px}
+input,select,button{font:inherit;color:inherit;background:transparent;border:0.5px solid var(--border);border-radius:var(--radius);height:36px;padding:0 10px}
+.app{max-width:960px;margin:0 auto;background:var(--surface-2);border:0.5px solid var(--border);border-radius:12px;overflow:hidden}
+.bar{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:0.5px solid var(--border);flex-wrap:wrap}
+.tab{font-size:13px;padding:5px 12px;border-radius:var(--radius);border:0.5px solid var(--border);color:var(--text-secondary)}
+.tab.on{background:var(--bg-accent);color:var(--text-accent);border-color:transparent;font-weight:500}
+.grid{display:grid;grid-template-columns:1fr 300px}
+.device{padding:16px 14px;border-right:0.5px solid var(--border)}
+.panel{padding:16px 14px;display:flex;flex-direction:column;gap:14px}
+label{font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px}
+.sw{width:18px;height:18px;border-radius:4px;display:inline-block}
+.row{display:flex;align-items:center;gap:8px;font-size:13px}
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="bar">
+    <span style="font-size:13px;color:var(--text-secondary)">● Mikro MK3 conectado</span>
+    <span style="flex:1"></span>
+    <span style="font-size:13px;color:var(--text-secondary)">Perfil</span>
+    <select style="width:130px;height:32px"><option>Trabalho</option><option>Música</option><option>Stream</option></select>
+    <button aria-label="Configurações" style="height:32px;width:32px;padding:0">⚙</button>
+  </div>
+  <div class="bar">
+    <span style="font-size:13px;color:var(--text-secondary);margin-right:4px">Páginas</span>
+    <span class="tab on">1 · Apps</span><span class="tab">2 · Design</span><span class="tab">3 · Dev</span>
+    <button style="height:28px;font-size:13px">+ Nova página</button>
+  </div>
+  <div class="grid">
+    <div class="device">
+      <object data="mikro-mk3.svg" type="image/svg+xml" style="width:100%;display:block"></object>
+      <p style="font-size:12px;color:var(--text-muted);margin:10px 0 0">Clique em qualquer pad, botão, no knob ou no strip para configurar.</p>
+    </div>
+    <div class="panel">
+      <div class="row" style="justify-content:space-between"><span style="font-size:15px;font-weight:500">Pad 13</span><span style="font-size:12px;color:var(--text-secondary)">Página 1 · Apps</span></div>
+      <div><label>Nome</label><input type="text" value="Chrome" style="width:100%"></div>
+      <div><label>Ação ao apertar</label><select style="width:100%"><option>Abrir programa</option><option>Atalho de teclado</option><option>Rodar script</option><option>Comando</option><option>Abrir link</option><option>Mídia</option><option>Trocar página</option></select></div>
+      <div class="row"><input type="text" value="/Applications/Google Chrome.app" style="flex:1;font-size:13px"><button style="width:36px;padding:0">📁</button></div>
+      <div><label>Cores por estado</label>
+        <div class="row"><span class="sw" style="background:#0C447C"></span><span style="flex:1">Repouso</span><span style="color:var(--text-muted)">azul escuro</span></div>
+        <div class="row"><span class="sw" style="background:#E6F1FB;border:0.5px solid var(--border)"></span><span style="flex:1">Pressionado</span><span style="color:var(--text-muted)">branco</span></div>
+        <div class="row"><span class="sw" style="background:#378ADD"></span><span style="flex:1">Programa aberto</span><span style="color:var(--text-muted)">azul</span></div>
+      </div>
+      <div><label>Texto na tela ao apertar</label><input type="text" value="Abrindo Chrome" style="width:100%"></div>
+      <div class="row" style="justify-content:flex-end"><button style="height:32px;font-size:13px">Testar no aparelho</button><button style="height:32px;font-size:13px;background:var(--fill-primary);color:var(--on-primary);border-color:transparent">Salvar</button></div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

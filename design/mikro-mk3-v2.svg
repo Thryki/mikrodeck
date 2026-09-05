@@ -1,0 +1,120 @@
+<svg viewBox="0 0 960 540" xmlns="http://www.w3.org/2000/svg" role="img" font-family="system-ui, -apple-system, Segoe UI, sans-serif">
+<title>Render estilizado do Maschine Mikro MK3, versão 2</title>
+<rect x="0" y="0" width="960" height="540" rx="18" fill="#2C2C2A"/>
+<g fill="#3d3d3b" stroke="#232321" stroke-width="1.5">
+<rect x="36" y="42" width="42" height="33" rx="5"/>
+<rect x="36" y="87" width="42" height="33" rx="5"/>
+<rect x="36" y="132" width="42" height="33" rx="5"/>
+<rect x="210" y="42" width="69" height="30" rx="5"/>
+<rect x="210" y="84" width="69" height="30" rx="5"/>
+<rect x="210" y="126" width="69" height="30" rx="5"/>
+<rect x="288" y="42" width="72" height="30" rx="5"/>
+<rect x="288" y="84" width="72" height="30" rx="5"/>
+<rect x="288" y="126" width="33" height="30" rx="5"/>
+<rect x="327" y="126" width="33" height="30" rx="5"/>
+<rect x="36" y="207" width="72" height="30" rx="5"/>
+<rect x="120" y="207" width="72" height="30" rx="5"/>
+<rect x="204" y="207" width="72" height="30" rx="5"/>
+<rect x="288" y="207" width="72" height="30" rx="5"/>
+<rect x="36" y="342" width="72" height="33" rx="5"/>
+<rect x="120" y="342" width="72" height="33" rx="5"/>
+<rect x="204" y="342" width="72" height="33" rx="5"/>
+<rect x="288" y="342" width="72" height="33" rx="5"/>
+<rect x="36" y="412" width="72" height="33" rx="5"/>
+<rect x="120" y="412" width="72" height="33" rx="5"/>
+<rect x="204" y="412" width="72" height="33" rx="5"/>
+<rect x="288" y="412" width="72" height="33" rx="5"/>
+<rect x="36" y="459" width="72" height="33" rx="5"/>
+<rect x="120" y="459" width="72" height="33" rx="5"/>
+<rect x="204" y="459" width="72" height="33" rx="5"/>
+<rect x="288" y="459" width="72" height="33" rx="5"/>
+<rect x="408" y="42" width="75" height="27" rx="5"/>
+<rect x="408" y="90" width="75" height="30" rx="5"/>
+<rect x="408" y="142" width="75" height="30" rx="5"/>
+<rect x="408" y="192" width="75" height="30" rx="5"/>
+<rect x="408" y="243" width="75" height="30" rx="5"/>
+<rect x="408" y="294" width="75" height="30" rx="5"/>
+<rect x="408" y="345" width="75" height="30" rx="5"/>
+<rect x="408" y="396" width="75" height="30" rx="5"/>
+<rect x="408" y="447" width="75" height="30" rx="5"/>
+<rect x="501" y="42" width="103" height="27" rx="5"/>
+<rect x="610" y="42" width="103" height="27" rx="5"/>
+<rect x="720" y="42" width="103" height="27" rx="5"/>
+<rect x="829" y="42" width="103" height="27" rx="5"/>
+</g>
+<rect x="102" y="39" width="102" height="36" rx="3" fill="#0b0b0b" stroke="#1a1a19"/>
+<text x="108" y="53" font-size="11" fill="#D3D1C7" font-family="ui-monospace, Menlo, monospace">Apps  1/3</text>
+<text x="108" y="67" font-size="11" fill="#888780" font-family="ui-monospace, Menlo, monospace">Chrome</text>
+<circle cx="150" cy="104" r="29" fill="#1f1f1e"/>
+<circle cx="150" cy="104" r="25" fill="none" stroke="#8a8985" stroke-width="5"/>
+<circle cx="150" cy="104" r="18" fill="#2f2f2d"/>
+<circle cx="150" cy="90" r="2.2" fill="#F1EFE8"/>
+<circle cx="57" cy="58" r="6" fill="none" stroke="#B4B2A9" stroke-width="2"/>
+<circle cx="57" cy="58" r="2" fill="#B4B2A9"/>
+<path d="M57 96 l3 6 6 1 -4 4 1 6 -6 -3 -6 3 1 -6 -4 -4 6 -1z" fill="#B4B2A9"/>
+<circle cx="55" cy="146" r="5" fill="none" stroke="#B4B2A9" stroke-width="2"/>
+<line x1="59" y1="150" x2="64" y2="155" stroke="#B4B2A9" stroke-width="2"/>
+<g font-size="11" fill="#D3D1C7" font-weight="500">
+<text x="216" y="55">VOLUME</text><text x="216" y="97">SWING</text><text x="216" y="139">TEMPO</text>
+<text x="294" y="55">PLUG-IN</text><text x="294" y="97">SAMPLING</text>
+<text x="304" y="146" text-anchor="middle">◀</text><text x="343" y="146" text-anchor="middle">▶</text>
+<text x="42" y="221">PITCH</text><text x="126" y="221">MOD</text><text x="210" y="221">PERFORM</text><text x="294" y="221">NOTES</text>
+<text x="42" y="356">GROUP</text><text x="126" y="356">AUTO</text><text x="210" y="356">LOCK</text><text x="292" y="356">NOTE REPEAT</text>
+<text x="42" y="426">RESTART</text><text x="126" y="426">ERASE</text><text x="210" y="426">TAP</text><text x="294" y="426">FOLLOW</text>
+<text x="42" y="473" fill="#97C459">▶ PLAY</text><text x="126" y="473" fill="#F09595">● REC</text><text x="210" y="473">■ STOP</text><text x="324" y="480" text-anchor="middle">SHIFT</text>
+<text x="414" y="60">FIXED VEL</text><text x="414" y="104">SCENE</text><text x="414" y="156">PATTERN</text><text x="414" y="206">EVENTS</text><text x="414" y="257">VARIATION</text><text x="414" y="308">DUPLICATE</text><text x="414" y="359">SELECT</text><text x="414" y="410">SOLO</text><text x="414" y="461">MUTE</text>
+<text x="552" y="60" text-anchor="middle">PAD MODE</text><text x="661" y="60" text-anchor="middle">KEYBOARD</text><text x="771" y="60" text-anchor="middle">CHORDS</text><text x="880" y="60" text-anchor="middle">STEP</text>
+</g>
+<g font-size="11" fill="#7a7975">
+<text x="216" y="67">Swing</text><text x="216" y="109">Tempo</text><text x="216" y="151">Page</text>
+<text x="210" y="233">FX Select</text>
+<text x="292" y="368">Arp</text>
+<text x="42" y="438">Loop</text><text x="126" y="438">Replace</text><text x="210" y="438">Metro</text><text x="294" y="438">Grid</text>
+<text x="126" y="485">Count-in</text>
+<text x="414" y="116">Section</text><text x="414" y="269">Navigate</text><text x="414" y="320">Double</text><text x="414" y="473">Choke</text>
+</g>
+<circle cx="48" cy="177" r="9" fill="none" stroke="#D3D1C7" stroke-width="3"/>
+<circle cx="48" cy="177" r="3" fill="#D3D1C7"/>
+<text x="64" y="183" font-size="17" fill="#F1EFE8" font-weight="500" letter-spacing="1">MASCHINE</text>
+<rect x="42" y="264" width="318" height="21" rx="4" fill="#1a1a19" stroke="#232321"/>
+<g fill="#378ADD">
+<circle cx="54" cy="274" r="2.5"/><circle cx="67" cy="274" r="2.5"/><circle cx="80" cy="274" r="2.5"/><circle cx="93" cy="274" r="2.5"/><circle cx="106" cy="274" r="2.5"/><circle cx="119" cy="274" r="2.5"/><circle cx="132" cy="274" r="2.5"/><circle cx="145" cy="274" r="2.5"/><circle cx="158" cy="274" r="2.5"/><circle cx="171" cy="274" r="2.5"/><circle cx="184" cy="274" r="2.5"/><circle cx="197" cy="274" r="2.5"/><circle cx="210" cy="274" r="2.5"/><circle cx="223" cy="274" r="2.5"/><circle cx="236" cy="274" r="2.5"/><circle cx="249" cy="274" r="2.5"/><circle cx="262" cy="274" r="2.5"/><circle cx="275" cy="274" r="2.5"/><circle cx="288" cy="274" r="2.5"/><circle cx="301" cy="274" r="2.5"/><circle cx="314" cy="274" r="2.5"/><circle cx="327" cy="274" r="2.5"/><circle cx="340" cy="274" r="2.5"/><circle cx="353" cy="274" r="2.5"/>
+</g>
+<g stroke="#1f1f1e" stroke-width="1.5">
+<rect x="501" y="82" width="103" height="100" rx="7" fill="#378ADD"/>
+<rect x="610" y="82" width="103" height="100" rx="7" fill="#7F77DD"/>
+<rect x="720" y="82" width="103" height="100" rx="7" fill="#1D9E75"/>
+<rect x="829" y="82" width="103" height="100" rx="7" fill="#EF9F27"/>
+<rect x="501" y="190" width="103" height="100" rx="7" fill="#D85A30"/>
+<rect x="610" y="190" width="103" height="100" rx="7" fill="#D4537E"/>
+<rect x="720" y="190" width="103" height="100" rx="7" fill="#3d3d3b"/>
+<rect x="829" y="190" width="103" height="100" rx="7" fill="#3d3d3b"/>
+<rect x="501" y="298" width="103" height="100" rx="7" fill="#5DCAA5"/>
+<rect x="610" y="298" width="103" height="100" rx="7" fill="#3d3d3b"/>
+<rect x="720" y="298" width="103" height="100" rx="7" fill="#3d3d3b"/>
+<rect x="829" y="298" width="103" height="100" rx="7" fill="#3d3d3b"/>
+<rect x="501" y="406" width="103" height="100" rx="7" fill="#E24B4A"/>
+<rect x="610" y="406" width="103" height="100" rx="7" fill="#3d3d3b"/>
+<rect x="720" y="406" width="103" height="100" rx="7" fill="#3d3d3b"/>
+<rect x="829" y="406" width="103" height="100" rx="7" fill="#3d3d3b"/>
+</g>
+<rect x="503" y="84" width="99" height="96" rx="6" fill="none" stroke="#FFFFFF" stroke-width="3"/>
+<g font-size="12" font-weight="500">
+<text x="509" y="98" fill="#042C53">13  Chrome</text><text x="597" y="98" fill="#042C53" text-anchor="end">A</text>
+<text x="618" y="98" fill="#26215C">14  Figma</text><text x="706" y="98" fill="#26215C" text-anchor="end">B</text>
+<text x="728" y="98" fill="#04342C">15  Notion</text><text x="816" y="98" fill="#04342C" text-anchor="end">C</text>
+<text x="837" y="98" fill="#412402">16  Slack</text><text x="925" y="98" fill="#412402" text-anchor="end">D</text>
+<text x="509" y="206" fill="#4A1B0C">9  Terminal</text><text x="597" y="206" fill="#4A1B0C" text-anchor="end">E</text>
+<text x="618" y="206" fill="#4B1528">10  Spotify</text><text x="706" y="206" fill="#4B1528" text-anchor="end">F</text>
+<text x="728" y="206" fill="#888780">11</text><text x="816" y="206" fill="#888780" text-anchor="end">G</text>
+<text x="837" y="206" fill="#888780">12</text><text x="925" y="206" fill="#888780" text-anchor="end">H</text>
+<text x="509" y="314" fill="#04342C">5  Mute</text><text x="597" y="314" fill="#04342C" text-anchor="end">I</text>
+<text x="618" y="314" fill="#888780">6</text><text x="706" y="314" fill="#888780" text-anchor="end">J</text>
+<text x="728" y="314" fill="#888780">7</text><text x="816" y="314" fill="#888780" text-anchor="end">K</text>
+<text x="837" y="314" fill="#888780">8</text><text x="925" y="314" fill="#888780" text-anchor="end">L</text>
+<text x="509" y="422" fill="#501313">1  Gravar</text><text x="597" y="422" fill="#501313" text-anchor="end">M</text>
+<text x="618" y="422" fill="#888780">2</text><text x="706" y="422" fill="#888780" text-anchor="end">N</text>
+<text x="728" y="422" fill="#888780">3</text><text x="816" y="422" fill="#888780" text-anchor="end">O</text>
+<text x="837" y="422" fill="#888780">4</text><text x="925" y="422" fill="#888780" text-anchor="end">P</text>
+</g>
+</svg>

@@ -1,0 +1,14 @@
+[package]
+name = "mikrodeck-mcp"
+version = "0.1.0"
+edition = "2021"
+description = "Servidor MCP do MikroDeck: configurar pads por linguagem natural"
+
+[[bin]]
+name = "mikrodeck-mcp"
+path = "src/main.rs"
+
+[dependencies]
+motor = { path = "../motor" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

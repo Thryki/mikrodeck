@@ -1,0 +1,26 @@
+@import "tailwindcss";
+
+/* A janela do app não rola: quem rola são os painéis internos. */
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+}
+
+/*
+ * O menu suspenso nativo do Windows não herda as cores do tema. Sem isto,
+ * no modo escuro o texto das opções fica quase invisível.
+ */
+select option {
+  background-color: #ffffff;
+  color: #1f1f1e;
+}
+
+@media (prefers-color-scheme: dark) {
+  select option {
+    background-color: #2a2a28;
+    color: #f1efe8;
+  }
+}

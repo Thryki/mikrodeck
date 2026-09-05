@@ -1,0 +1,506 @@
+//! O que um controle faz quando é acionado.
+//!
+//! As ações rodam numa thread própria. O caminho crítico do motor é
+//! pad -> hid -> estado, e ele nunca pode ficar esperando um programa abrir.
+
+use crate::rede::{self, HomeAssistant, Metodo};
+use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
+use std::sync::mpsc::{self, Sender};
+use std::sync::{Arc, RwLock};
+use std::thread;
+
+/// Uma ação que o motor sabe executar.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "tipo", rename_all = "snake_case")]
+pub enum Acao {
+    /// Não faz nada. Serve para pad decorativo ou ainda não configurado.
+    Nenhuma,
+    /// Abre um programa.
+    AbrirPrograma {
+        caminho: String,
+        #[serde(default)]
+        argumentos: Vec<String>,
+    },
+    /// Abre uma URL no navegador padrão.
+    AbrirUrl { url: String },
+    /// Roda uma linha de comando no shell.
+    Comando { linha: String },
+    /// Dispara um atalho de teclado, por exemplo "ctrl+shift+n".
+    Atalho { teclas: String },
+    /// Controle de mídia do sistema.
+    Midia { tecla: TeclaMidia },
+    /// Vai para a próxima página.
+    ProximaPagina,
+    /// Volta para a página anterior.
+    PaginaAnterior,
+    /// Vai direto para uma página, contando de 1.
+    IrParaPagina { numero: usize },
+    /// Liga e desliga o MikroDeck sem fechar o programa. Pausado, os LEDs apagam
+    /// e nenhum pad executa ação, para o aparelho voltar a ser um Maschine comum.
+    PausarRetomar,
+    /// Chama um serviço do Home Assistant, por exemplo `light.toggle` na entidade
+    /// `light.sala`. Endereço e token ficam na config geral.
+    HomeAssistant {
+        servico: String,
+        #[serde(default)]
+        entidade: String,
+    },
+    /// Requisição HTTP crua. Cobre webhook do Home Assistant e qualquer outro
+    /// serviço da casa que aceite uma chamada.
+    Http {
+        url: String,
+        #[serde(default)]
+        metodo: Metodo,
+        #[serde(default)]
+        cabecalhos: BTreeMap<String, String>,
+        #[serde(default)]
+        corpo: Option<String>,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TeclaMidia {
+    TocarPausar,
+    Proxima,
+    Anterior,
+    Parar,
+    AumentarVolume,
+    DiminuirVolume,
+    Mudo,
+}
+
+/// Ações que o executor não trata sozinho, porque mexem no estado do motor.
+#[derive(Debug, Clone, PartialEq)]
+pub enum EfeitoNoEstado {
+    ProximaPagina,
+    PaginaAnterior,
+    IrParaPagina(usize),
+    PausarRetomar,
+}
+
+impl Acao {
+    /// Se a ação muda a página, devolve qual efeito. O executor não dá conta disso
+    /// porque ele roda em outra thread e não enxerga o estado.
+    pub fn efeito_no_estado(&self) -> Option<EfeitoNoEstado> {
+        match self {
+            Acao::ProximaPagina => Some(EfeitoNoEstado::ProximaPagina),
+            Acao::PaginaAnterior => Some(EfeitoNoEstado::PaginaAnterior),
+            Acao::IrParaPagina { numero } => Some(EfeitoNoEstado::IrParaPagina(*numero)),
+            Acao::PausarRetomar => Some(EfeitoNoEstado::PausarRetomar),
+            _ => None,
+        }
+    }
+}
+
+/// Fila de ações rodando numa thread separada.
+pub struct Executor {
+    envia: Sender<Acao>,
+    /// A ligação com o Home Assistant vive aqui porque a thread de ações precisa
+    /// dela, e ela muda quando a pessoa salva a config.
+    casa: Arc<RwLock<HomeAssistant>>,
+}
+
+impl Executor {
+    pub fn novo() -> Self {
+        let (envia, recebe) = mpsc::channel::<Acao>();
+        let casa = Arc::new(RwLock::new(HomeAssistant::default()));
+        let casa_thread = Arc::clone(&casa);
+        thread::Builder::new()
+            .name("mikrodeck-acoes".into())
+            .spawn(move || {
+                for acao in recebe {
+                    let ligacao = casa_thread
+                        .read()
+                        .map(|c| c.clone())
+                        .unwrap_or_default();
+                    if let Err(e) = executar(&acao, &ligacao) {
+                        eprintln!("ação falhou ({acao:?}): {e}");
+                    }
+                }
+            })
+            .expect("subir a thread de ações");
+        Self { envia, casa }
+    }
+
+    /// Enfileira uma ação. Nunca bloqueia.
+    pub fn disparar(&self, acao: Acao) {
+        let _ = self.envia.send(acao);
+    }
+
+    /// Atualiza a ligação com o Home Assistant depois que a config muda.
+    pub fn definir_home_assistant(&self, ligacao: HomeAssistant) {
+        if let Ok(mut alvo) = self.casa.write() {
+            *alvo = ligacao;
+        }
+    }
+}
+
+fn executar(acao: &Acao, casa: &HomeAssistant) -> std::io::Result<()> {
+    use std::process::Command;
+    match acao {
+        Acao::Nenhuma => Ok(()),
+        Acao::AbrirPrograma {
+            caminho,
+            argumentos,
+        } => {
+            // Atalho do Windows não é executável: o CreateProcess recusa com
+            // "não é um aplicativo Win32 válido". Quem sabe abrir atalho é o shell.
+            if precisa_do_shell(caminho) {
+                return abrir_pelo_shell(caminho, argumentos);
+            }
+            match Command::new(caminho).args(argumentos).spawn() {
+                Ok(_) => Ok(()),
+                // Duas coisas caem aqui e as duas o shell resolve:
+                // nomes curtos como "chrome", que o Windows resolve pela chave de
+                // registro "App Paths" que o CreateProcess não consulta; e qualquer
+                // arquivo que dependa de associação de tipo.
+                Err(_) => abrir_pelo_shell(caminho, argumentos),
+            }
+        }
+        Acao::AbrirUrl { url } => {
+            // `start` é interno do cmd, por isso precisa do cmd na frente.
+            // O par de aspas vazias é o título da janela, que o `start` exige
+            // quando o argumento seguinte vem entre aspas.
+            Command::new("cmd")
+                .args(["/C", "start", "", &completar_url(url)])
+                .spawn()?;
+            Ok(())
+        }
+        Acao::Comando { linha } => {
+            Command::new("cmd").args(["/C", linha]).spawn()?;
+            Ok(())
+        }
+        Acao::Atalho { teclas } => {
+            teclado::mandar_atalho(teclas);
+            Ok(())
+        }
+        Acao::Midia { tecla } => {
+            teclado::mandar_tecla_virtual(tecla.codigo_virtual());
+            Ok(())
+        }
+        Acao::HomeAssistant { servico, entidade } => {
+            let Some((url, corpo)) = casa.chamada(servico, entidade) else {
+                eprintln!(
+                    "Home Assistant não configurado, ou serviço sem domínio: {servico:?}"
+                );
+                return Ok(());
+            };
+            let mut cabecalhos = BTreeMap::new();
+            cabecalhos.insert(
+                "Authorization".to_string(),
+                format!("Bearer {}", casa.token.trim()),
+            );
+            relatar(rede::chamar(Metodo::Post, &url, &cabecalhos, Some(&corpo)));
+            Ok(())
+        }
+        Acao::Http {
+            url,
+            metodo,
+            cabecalhos,
+            corpo,
+        } => {
+            relatar(rede::chamar(*metodo, url, cabecalhos, corpo.as_deref()));
+            Ok(())
+        }
+        // Tratadas pelo estado, não aqui.
+        Acao::ProximaPagina
+        | Acao::PaginaAnterior
+        | Acao::IrParaPagina { .. }
+        | Acao::PausarRetomar => Ok(()),
+    }
+}
+
+/// Uma requisição que falha não derruba nada; só vira aviso no log. O pad já
+/// acendeu e a pessoa já seguiu a vida.
+fn relatar(resultado: Result<u16, String>) {
+    match resultado {
+        Ok(codigo) if (200..300).contains(&codigo) => {}
+        Ok(codigo) => eprintln!("requisição respondeu {codigo}"),
+        Err(e) => eprintln!("requisição falhou: {e}"),
+    }
+}
+
+/// Completa um endereço digitado pela metade.
+///
+/// Ninguém digita `https://` numa ferramenta cujo campo já se chama "Link", e
+/// sem esquema o `start` do Windows trata o texto como nome de arquivo e não
+/// abre nada. O que já tem esquema passa intacto.
+fn completar_url(url: &str) -> String {
+    let limpo = url.trim();
+    if limpo.is_empty() {
+        return limpo.to_string();
+    }
+    // Qualquer coisa antes de "://" é esquema: http, https, ftp, steam, obsidian.
+    // `mailto:` e outros de dois pontos simples também passam.
+    let tem_esquema = match limpo.find(':') {
+        Some(i) => limpo[..i]
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '+' || c == '-' || c == '.'),
+        None => false,
+    };
+    if tem_esquema {
+        limpo.to_string()
+    } else {
+        format!("https://{limpo}")
+    }
+}
+
+/// Extensões que o `CreateProcess` não sabe abrir sozinho. Atalho e script de shell
+/// dependem do interpretador do Windows.
+const SO_PELO_SHELL: [&str; 4] = ["lnk", "url", "appref-ms", "msc"];
+
+fn precisa_do_shell(caminho: &str) -> bool {
+    caminho
+        .rsplit('.')
+        .next()
+        .map(|ext| SO_PELO_SHELL.contains(&ext.to_ascii_lowercase().as_str()))
+        .unwrap_or(false)
+}
+
+/// Abre pelo shell do Windows, que resolve atalho, associação de tipo e nome curto.
+/// O par de aspas vazias é o título da janela, que o `start` exige quando o
+/// argumento seguinte vem entre aspas.
+fn abrir_pelo_shell(caminho: &str, argumentos: &[String]) -> std::io::Result<()> {
+    use std::process::Command;
+    let mut cmd = Command::new("cmd");
+    cmd.args(["/C", "start", "", caminho]);
+    cmd.args(argumentos);
+    cmd.spawn()?;
+    Ok(())
+}
+
+impl TeclaMidia {
+    fn codigo_virtual(self) -> u16 {
+        // Códigos de tecla virtual do Windows.
+        match self {
+            TeclaMidia::TocarPausar => 0xB3,     // VK_MEDIA_PLAY_PAUSE
+            TeclaMidia::Proxima => 0xB0,         // VK_MEDIA_NEXT_TRACK
+            TeclaMidia::Anterior => 0xB1,        // VK_MEDIA_PREV_TRACK
+            TeclaMidia::Parar => 0xB2,           // VK_MEDIA_STOP
+            TeclaMidia::AumentarVolume => 0xAF,  // VK_VOLUME_UP
+            TeclaMidia::DiminuirVolume => 0xAE,  // VK_VOLUME_DOWN
+            TeclaMidia::Mudo => 0xAD,            // VK_VOLUME_MUTE
+        }
+    }
+}
+
+/// Simulação de teclado no Windows, via SendInput.
+pub mod teclado {
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
+        INPUT, INPUT_0, INPUT_KEYBOARD, INPUT_MOUSE, KEYBDINPUT, KEYEVENTF_KEYUP, SendInput,
+        VIRTUAL_KEY,
+    };
+
+    /// Traduz um nome de tecla no código virtual do Windows.
+    /// Aceita as teclas comuns de atalho; devolve `None` para nome desconhecido.
+    pub fn codigo_da_tecla(nome: &str) -> Option<u16> {
+        let n = nome.trim().to_lowercase();
+        Some(match n.as_str() {
+            "ctrl" | "control" => 0x11,
+            "shift" => 0x10,
+            "alt" => 0x12,
+            "win" | "super" | "meta" => 0x5B,
+            "enter" | "return" => 0x0D,
+            "tab" => 0x09,
+            "esc" | "escape" => 0x1B,
+            "espaco" | "space" => 0x20,
+            "backspace" => 0x08,
+            "delete" | "del" => 0x2E,
+            "home" => 0x24,
+            "end" => 0x23,
+            "pageup" => 0x21,
+            "pagedown" => 0x22,
+            "cima" | "up" => 0x26,
+            "baixo" | "down" => 0x28,
+            "esquerda" | "left" => 0x25,
+            "direita" | "right" => 0x27,
+            "printscreen" | "print" => 0x2C,
+            _ => {
+                // F1 a F24
+                if let Some(resto) = n.strip_prefix('f') {
+                    if let Ok(numero) = resto.parse::<u16>() {
+                        if (1..=24).contains(&numero) {
+                            return Some(0x70 + numero - 1);
+                        }
+                    }
+                }
+                // Letras e números soltos usam o próprio código ASCII maiúsculo.
+                let mut chars = n.chars();
+                match (chars.next(), chars.next()) {
+                    (Some(c), None) if c.is_ascii_alphanumeric() => {
+                        c.to_ascii_uppercase() as u16
+                    }
+                    _ => return None,
+                }
+            }
+        })
+    }
+
+    /// Manda um atalho como "ctrl+shift+n": aperta os modificadores na ordem,
+    /// aperta e solta a última tecla, e solta os modificadores na ordem inversa.
+    pub fn mandar_atalho(atalho: &str) {
+        let codigos: Vec<u16> = atalho.split('+').filter_map(codigo_da_tecla).collect();
+        if codigos.is_empty() {
+            eprintln!("atalho não reconhecido: {atalho}");
+            return;
+        }
+        for &c in &codigos {
+            enviar(c, false);
+        }
+        for &c in codigos.iter().rev() {
+            enviar(c, true);
+        }
+    }
+
+    /// Aperta e solta uma tecla virtual só.
+    pub fn mandar_tecla_virtual(codigo: u16) {
+        enviar(codigo, false);
+        enviar(codigo, true);
+    }
+
+    /// Gira a roda do mouse, como o scroll. `passos` positivo rola para cima.
+    ///
+    /// Um passo é a unidade que o Windows chama de "linha de rolagem", o mesmo
+    /// que um clique da roda de um mouse comum.
+    pub fn rolar(passos: i32) {
+        use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
+            MOUSEEVENTF_WHEEL, MOUSEINPUT,
+        };
+        const RODA_POR_PASSO: i32 = 120; // WHEEL_DELTA
+        let mut entrada = INPUT {
+            r#type: INPUT_MOUSE,
+            Anonymous: INPUT_0 {
+                mi: MOUSEINPUT {
+                    dx: 0,
+                    dy: 0,
+                    mouseData: (passos * RODA_POR_PASSO) as u32,
+                    dwFlags: MOUSEEVENTF_WHEEL,
+                    time: 0,
+                    dwExtraInfo: 0,
+                },
+            },
+        };
+        unsafe {
+            SendInput(1, &mut entrada, std::mem::size_of::<INPUT>() as i32);
+        }
+    }
+
+    fn enviar(codigo: u16, soltar: bool) {
+        let mut entrada = INPUT {
+            r#type: INPUT_KEYBOARD,
+            Anonymous: INPUT_0 {
+                ki: KEYBDINPUT {
+                    wVk: codigo as VIRTUAL_KEY,
+                    wScan: 0,
+                    dwFlags: if soltar { KEYEVENTF_KEYUP } else { 0 },
+                    time: 0,
+                    dwExtraInfo: 0,
+                },
+            },
+        };
+        unsafe {
+            SendInput(1, &mut entrada, std::mem::size_of::<INPUT>() as i32);
+        }
+    }
+}
+
+#[cfg(test)]
+mod testes_url {
+    use super::completar_url;
+
+    #[test]
+    fn endereco_sem_esquema_ganha_https() {
+        assert_eq!(completar_url("youtube.com"), "https://youtube.com");
+        assert_eq!(completar_url("google.com/maps"), "https://google.com/maps");
+        assert_eq!(completar_url("  claude.ai  "), "https://claude.ai");
+    }
+
+    #[test]
+    fn endereco_com_esquema_passa_intacto() {
+        assert_eq!(completar_url("https://claude.ai"), "https://claude.ai");
+        assert_eq!(completar_url("http://casa.local:8123"), "http://casa.local:8123");
+        assert_eq!(
+            completar_url("mailto:alguem@exemplo.com"),
+            "mailto:alguem@exemplo.com"
+        );
+        assert_eq!(completar_url("obsidian://open"), "obsidian://open");
+    }
+
+    #[test]
+    fn vazio_continua_vazio() {
+        assert_eq!(completar_url("   "), "");
+    }
+}
+
+#[cfg(test)]
+mod testes {
+    use super::*;
+
+    #[test]
+    fn so_as_acoes_de_pagina_mexem_no_estado() {
+        assert_eq!(
+            Acao::ProximaPagina.efeito_no_estado(),
+            Some(EfeitoNoEstado::ProximaPagina)
+        );
+        assert_eq!(
+            Acao::IrParaPagina { numero: 3 }.efeito_no_estado(),
+            Some(EfeitoNoEstado::IrParaPagina(3))
+        );
+        assert_eq!(
+            Acao::AbrirUrl {
+                url: "https://exemplo.com".into()
+            }
+            .efeito_no_estado(),
+            None
+        );
+    }
+
+    #[test]
+    fn atalho_do_windows_vai_pelo_shell() {
+        // Foi um bug real: escolher um .lnk no seletor de arquivos falhava com
+        // "não é um aplicativo Win32 válido", porque o CreateProcess não abre atalho.
+        assert!(precisa_do_shell(r"C:\Users\x\Menu\Alethe.lnk"));
+        assert!(precisa_do_shell("atalho.LNK"), "extensão sem diferenciar maiúscula");
+        assert!(precisa_do_shell("favorito.url"));
+        assert!(!precisa_do_shell(r"C:\Windows\notepad.exe"));
+        assert!(!precisa_do_shell("chrome"));
+    }
+
+    #[test]
+    fn traduz_teclas_de_atalho() {
+        use teclado::codigo_da_tecla;
+        assert_eq!(codigo_da_tecla("ctrl"), Some(0x11));
+        assert_eq!(codigo_da_tecla("Shift"), Some(0x10));
+        assert_eq!(codigo_da_tecla("f5"), Some(0x74));
+        assert_eq!(codigo_da_tecla("F12"), Some(0x7B));
+        assert_eq!(codigo_da_tecla("n"), Some(b'N' as u16));
+        assert_eq!(codigo_da_tecla("7"), Some(b'7' as u16));
+        assert_eq!(codigo_da_tecla("tecla_que_nao_existe"), None);
+        assert_eq!(codigo_da_tecla("f99"), None);
+    }
+
+    #[test]
+    fn acao_vai_e_volta_do_json() {
+        let a = Acao::Atalho {
+            teclas: "ctrl+shift+n".into(),
+        };
+        let json = serde_json::to_string(&a).unwrap();
+        assert!(json.contains("\"tipo\":\"atalho\""));
+        assert_eq!(serde_json::from_str::<Acao>(&json).unwrap(), a);
+    }
+
+    #[test]
+    fn abrir_programa_aceita_json_sem_argumentos() {
+        let a: Acao =
+            serde_json::from_str(r#"{"tipo":"abrir_programa","caminho":"notepad.exe"}"#).unwrap();
+        assert_eq!(
+            a,
+            Acao::AbrirPrograma {
+                caminho: "notepad.exe".into(),
+                argumentos: vec![]
+            }
+        );
+    }
+}
