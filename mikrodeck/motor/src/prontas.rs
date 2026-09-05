@@ -25,6 +25,8 @@ pub fn catalogo() -> Vec<Pronta> {
         pronta("claude", "Claude", "Abrir o Claude, começar um chat novo e ir para os projetos."),
         pronta("casa", "Casa", "Exemplos de automação pelo Home Assistant, para você trocar pelas suas entidades."),
         pronta("trabalho", "Trabalho", "Copiar, colar, desfazer, print da tela e as janelas virtuais do Windows."),
+        pronta("navegador", "Navegador", "Abas, histórico, downloads, zoom e tela cheia do navegador."),
+        pronta("windows", "Windows", "Encaixar janelas, trocar de app, gravar a tela e a área de transferência."),
     ]
 }
 
@@ -43,6 +45,8 @@ pub fn montar(id: &str) -> Option<Pagina> {
         "claude" => Some(claude()),
         "casa" => Some(casa()),
         "trabalho" => Some(trabalho()),
+        "navegador" => Some(navegador()),
+        "windows" => Some(windows()),
         _ => None,
     }
 }
@@ -181,6 +185,68 @@ fn trabalho() -> Pagina {
     }
 }
 
+/// Atalhos do navegador. Valem em Chrome, Edge e Firefox sem mudar nada.
+fn navegador() -> Pagina {
+    let mut pads = BTreeMap::new();
+    pads.insert(13, pad_atalho("Aba nova", "ctrl+t", Cor::Ciano));
+    pads.insert(14, pad_atalho("Fechar aba", "ctrl+w", Cor::Vermelho));
+    pads.insert(15, pad_atalho("Reabrir aba", "ctrl+shift+t", Cor::Lima));
+    pads.insert(16, pad_atalho("Anônima", "ctrl+shift+n", Cor::Ameixa));
+    pads.insert(9, pad_atalho("Voltar", "alt+left", Cor::Azul));
+    pads.insert(10, pad_atalho("Avançar", "alt+right", Cor::Azul));
+    pads.insert(11, pad_atalho("Recarregar", "f5", Cor::Turquesa));
+    pads.insert(12, pad_atalho("Buscar", "ctrl+f", Cor::Amarelo));
+    pads.insert(5, pad_atalho("Zoom +", "ctrl+shift+equal", Cor::Laranja));
+    pads.insert(6, pad_atalho("Zoom -", "ctrl+minus", Cor::Laranja));
+    pads.insert(7, pad_atalho("Zoom 100%", "ctrl+0", Cor::LaranjaClaro));
+    pads.insert(8, pad_atalho("Tela cheia", "f11", Cor::Violeta));
+    pads.insert(1, pad_atalho("Histórico", "ctrl+h", Cor::Magenta));
+    pads.insert(2, pad_atalho("Downloads", "ctrl+j", Cor::Magenta));
+    pads.insert(3, pad_atalho("Favoritar", "ctrl+d", Cor::AmareloQuente));
+    pads.insert(4, pad_atalho("Favoritos", "ctrl+shift+o", Cor::AmareloQuente));
+    Pagina {
+        nome: "Navegador".into(),
+        pads,
+        botoes: BTreeMap::new(),
+    }
+}
+
+/// Janelas e teclas do próprio Windows, as que se usa o dia inteiro.
+fn windows() -> Pagina {
+    let mut pads = BTreeMap::new();
+    pads.insert(13, pad_atalho("Encaixar <", "win+left", Cor::Azul));
+    pads.insert(14, pad_atalho("Encaixar >", "win+right", Cor::Azul));
+    pads.insert(15, pad_atalho("Maximizar", "win+up", Cor::Turquesa));
+    pads.insert(16, pad_atalho("Minimizar", "win+down", Cor::Turquesa));
+    pads.insert(9, pad_atalho("Trocar app", "alt+tab", Cor::Ciano));
+    pads.insert(10, pad_atalho("Mostrar tudo", "win+tab", Cor::Ciano));
+    pads.insert(11, pad_atalho("Área de trabalho", "win+d", Cor::Menta));
+    pads.insert(12, pad_atalho("Fechar janela", "alt+f4", Cor::Vermelho));
+    pads.insert(5, pad_atalho("Recorte", "win+shift+s", Cor::Lima));
+    pads.insert(6, pad_atalho("Gravar tela", "win+alt+r", Cor::Vermelho));
+    pads.insert(7, pad_atalho("Área de transf.", "win+v", Cor::Violeta));
+    pads.insert(8, pad_atalho("Emoji", "win+period", Cor::Amarelo));
+    pads.insert(
+        1,
+        pad(
+            "Explorador",
+            Acao::AbrirPrograma {
+                caminho: "explorer.exe".into(),
+                argumentos: vec![],
+            },
+            Cor::Laranja,
+        ),
+    );
+    pads.insert(2, pad_atalho("Configurações", "win+i", Cor::Branco));
+    pads.insert(3, pad_atalho("Projetar", "win+p", Cor::Roxo));
+    pads.insert(4, pad_atalho("Bloquear", "win+l", Cor::Fucsia));
+    Pagina {
+        nome: "Windows".into(),
+        pads,
+        botoes: BTreeMap::new(),
+    }
+}
+
 fn pad(nome: &str, acao: Acao, cor: Cor) -> Controle {
     Controle {
         nome: nome.into(),
@@ -236,6 +302,25 @@ mod testes {
         for p in catalogo() {
             let pagina = montar(&p.id).unwrap_or_else(|| panic!("id sem página: {}", p.id));
             assert!(!pagina.pads.is_empty(), "página {} sem pads", p.id);
+        }
+    }
+
+    #[test]
+    fn todo_atalho_das_prontas_tem_codigo() {
+        // Uma tecla sem codigo cancela o atalho inteiro, e em silencio.
+        use crate::acoes::teclado::codigo_da_tecla;
+        for p in catalogo() {
+            for (pad, controle) in montar(&p.id).unwrap().pads {
+                if let Acao::Atalho { teclas } = &controle.acao {
+                    for parte in teclas.split('+') {
+                        assert!(
+                            codigo_da_tecla(parte).is_some(),
+                            "tecla {parte:?} sem codigo, no pad {pad} de {}",
+                            p.id
+                        );
+                    }
+                }
+            }
         }
     }
 

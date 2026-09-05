@@ -317,6 +317,21 @@ pub mod teclado {
             "esquerda" | "left" => 0x25,
             "direita" | "right" => 0x27,
             "printscreen" | "print" => 0x2C,
+            "insert" | "ins" => 0x2D,
+            "capslock" => 0x14,
+            // Pontuacao. Os codigos OEM valem para o teclado dos EUA, que e o
+            // layout que o Windows usa para traduzir estes atalhos.
+            "menos" | "minus" | "-" => 0xBD,
+            "mais" | "plus" | "igual" | "equal" | "=" | "+" => 0xBB,
+            "ponto" | "period" | "." => 0xBE,
+            "virgula" | "comma" | "," => 0xBC,
+            "pontoevirgula" | "semicolon" | ";" => 0xBA,
+            "barra" | "slash" | "/" => 0xBF,
+            "crase" | "backtick" | "`" => 0xC0,
+            "colchete_esquerdo" | "bracketleft" | "[" => 0xDB,
+            "contrabarra" | "backslash" => 0xDC,
+            "colchete_direito" | "bracketright" | "]" => 0xDD,
+            "apostrofo" | "quote" | "'" => 0xDE,
             _ => {
                 // F1 a F24
                 if let Some(resto) = n.strip_prefix('f') {
@@ -341,7 +356,23 @@ pub mod teclado {
     /// Manda um atalho como "ctrl+shift+n": aperta os modificadores na ordem,
     /// aperta e solta a última tecla, e solta os modificadores na ordem inversa.
     pub fn mandar_atalho(atalho: &str) {
-        let codigos: Vec<u16> = atalho.split('+').filter_map(codigo_da_tecla).collect();
+        // Uma parte desconhecida cancela o atalho inteiro. Descartar so ela
+        // mandaria outro atalho: "ctrl+xis" viraria um "ctrl" solto.
+        let mut codigos: Vec<u16> = Vec::new();
+        for parte in atalho.split('+') {
+            match codigo_da_tecla(parte) {
+                Some(c) => codigos.push(c),
+                None => {
+                    // Parte vazia e so separador solto ("ctrl+" ou "ctrl++").
+                    // Para a tecla "+" em si, escreva "ctrl+mais".
+                    if parte.trim().is_empty() {
+                        continue;
+                    }
+                    eprintln!("atalho ignorado, tecla desconhecida: {parte:?} em {atalho:?}");
+                    return;
+                }
+            }
+        }
         if codigos.is_empty() {
             eprintln!("atalho não reconhecido: {atalho}");
             return;
@@ -431,6 +462,45 @@ mod testes_url {
     #[test]
     fn vazio_continua_vazio() {
         assert_eq!(completar_url("   "), "");
+    }
+}
+
+#[cfg(test)]
+mod testes_teclas {
+    use crate::acoes::teclado::codigo_da_tecla;
+
+    #[test]
+    fn pontuacao_tem_codigo() {
+        // Sem isso, "ctrl+minus" perdia a tecla e mandava um "ctrl" solto.
+        for nome in ["minus", "-", "equal", "=", "period", ".", "comma", "/"] {
+            assert!(codigo_da_tecla(nome).is_some(), "{nome} sem codigo");
+        }
+        assert_eq!(codigo_da_tecla("menos"), codigo_da_tecla("-"));
+        assert_eq!(codigo_da_tecla("ponto"), codigo_da_tecla("."));
+    }
+
+    #[test]
+    fn tecla_desconhecida_continua_sem_codigo() {
+        assert_eq!(codigo_da_tecla("xis grande"), None);
+        assert_eq!(codigo_da_tecla("f99"), None);
+    }
+
+    #[test]
+    fn as_teclas_das_paginas_prontas_existem() {
+        // Guarda de regressao: toda tecla que as paginas prontas usam precisa
+        // ter codigo, senao o atalho e cancelado inteiro em silencio.
+        for atalho in [
+            "ctrl+t", "ctrl+w", "ctrl+shift+t", "ctrl+shift+n", "alt+left",
+            "alt+right", "f5", "ctrl+f", "ctrl+shift+equal", "ctrl+minus",
+            "ctrl+0", "f11", "ctrl+h", "ctrl+j", "ctrl+d", "ctrl+shift+o",
+            "win+left", "win+right", "win+up", "win+down", "alt+tab",
+            "win+tab", "win+d", "alt+f4", "win+shift+s", "win+alt+r",
+            "win+v", "win+period", "win+i", "win+p", "win+l",
+        ] {
+            for parte in atalho.split('+') {
+                assert!(codigo_da_tecla(parte).is_some(), "{parte:?} em {atalho:?}");
+            }
+        }
     }
 }
 

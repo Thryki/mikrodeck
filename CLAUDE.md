@@ -296,6 +296,32 @@ certo e sempre `npm run tauri build`. E antes de buildar, derrubar
 - Repositorio no ar: https://github.com/Thryki/mikrodeck, privado.
   `gh` 2.100 instalado, sem login ainda; o push usa a credencial do Git.
 
+### Verificado no aparelho (2026-09-05, tarde)
+
+Confirmado por foto: modo Contorno anda na ordem que o Davi pediu, com rastro de
+quatro pads e troca de cor a cada volta. `scripts/olho.sh` girava a imagem duas
+vezes (`hflip,vflip,rotate=PI` volta ao original); corrigido para `hflip,vflip`.
+
+Queixa do Davi sobre a respiracao: os pads subindo e descendo de brilho anulam o
+slider de brilho e nao agradam. A opcao de ligar, desligar e trocar de modo ja
+existia em Configuracoes > Luz dos pads. O que estragava era o **descanso em 5
+segundos**, deixado de teste. Voltou para 90 s, e o modo padrao dele agora e
+Contorno, que nao mexe no brilho.
+
+### Bug das teclas de pontuacao
+
+`codigo_da_tecla` nao conhecia `-`, `=`, `.`, `,` e companhia, e `mandar_atalho`
+usava `filter_map`: a tecla desconhecida sumia e o atalho virava outro
+("ctrl+minus" mandava um "ctrl" solto). Agora a pontuacao tem codigo OEM e uma
+parte desconhecida **cancela o atalho inteiro**, com aviso no log. Teste de
+regressao cobre toda tecla de toda pagina pronta.
+
+### Paginas prontas: Navegador e Windows
+
+Somam seis com as quatro antigas. Navegador: abas, historico, downloads, zoom,
+tela cheia. Windows: encaixar janelas, trocar de app, gravar tela, area de
+transferencia, emoji, projetar.
+
 ### Nao verificado no aparelho
 
 A luz dos pads passa nos 130 testes mas **nao foi confirmada por foto**: a
