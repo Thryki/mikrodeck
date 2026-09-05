@@ -8,11 +8,11 @@
 # Precisa de administrador.
 
 $ErrorActionPreference = 'Continue'
-$saida = '$env:USERPROFILE\AppData\Local\Temp\mikrodeck-captura'
+$saida = "$env:USERPROFILE\AppData\Local\Temp\mikrodeck-captura"
 New-Item -ItemType Directory -Force -Path $saida | Out-Null
 Start-Transcript -Path (Join-Path $saida 'teste-admin.txt') -Force | Out-Null
 
-$envia = '$env:USERPROFILE\Documents\MikroDeck\mikrodeck\spike-hid\target\debug\envia.exe'
+$envia = "$env:USERPROFILE\Documents\MikroDeck\mikrodeck\spike-hid\target\debug\envia.exe"
 $marca = Join-Path $saida 'etapa-admin.txt'
 $id = [Security.Principal.WindowsIdentity]::GetCurrent()
 $pr = New-Object Security.Principal.WindowsPrincipal($id)

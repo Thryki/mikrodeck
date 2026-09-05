@@ -5,7 +5,7 @@
 # driver WinUSB. Depois de devolver o driver HID, o serviço continua sem enxergar o aparelho
 # até ser reiniciado.
 
-$saida = '$env:USERPROFILE\AppData\Local\Temp\mikrodeck-captura'
+$saida = "$env:USERPROFILE\AppData\Local\Temp\mikrodeck-captura"
 New-Item -ItemType Directory -Force -Path $saida | Out-Null
 Start-Transcript -Path (Join-Path $saida 'ni.txt') -Force | Out-Null
 

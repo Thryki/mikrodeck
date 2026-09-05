@@ -1,6 +1,6 @@
 # Diagnóstico do USBPcap: descobre por que nenhum root hub aparece.
 # Roda como administrador.
-$saida = '$env:USERPROFILE\AppData\Local\Temp\mikrodeck-captura'
+$saida = "$env:USERPROFILE\AppData\Local\Temp\mikrodeck-captura"
 New-Item -ItemType Directory -Force -Path $saida | Out-Null
 Start-Transcript -Path (Join-Path $saida 'diag.txt') -Force | Out-Null
 

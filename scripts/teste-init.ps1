@@ -10,11 +10,11 @@
 #  4. Roda a nossa sequência de inicialização e tenta de novo. É o que queremos que funcione.
 
 $ErrorActionPreference = 'Continue'
-$saida = '$env:USERPROFILE\AppData\Local\Temp\mikrodeck-captura'
+$saida = "$env:USERPROFILE\AppData\Local\Temp\mikrodeck-captura"
 New-Item -ItemType Directory -Force -Path $saida | Out-Null
 Start-Transcript -Path (Join-Path $saida 'teste-init.txt') -Force | Out-Null
 
-$envia = '$env:USERPROFILE\Documents\MikroDeck\mikrodeck\spike-hid\target\debug\envia.exe'
+$envia = "$env:USERPROFILE\Documents\MikroDeck\mikrodeck\spike-hid\target\debug\envia.exe"
 $marca = Join-Path $saida 'etapa.txt'
 
 Write-Host "1) Parando o servico da NI"

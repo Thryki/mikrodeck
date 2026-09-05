@@ -2,11 +2,11 @@
 # É o teste que define se o MikroDeck pode ser independente do software da NI.
 # Precisa de administrador. No fim, religa o serviço.
 
-$saida = '$env:USERPROFILE\AppData\Local\Temp\mikrodeck-captura'
+$saida = "$env:USERPROFILE\AppData\Local\Temp\mikrodeck-captura"
 New-Item -ItemType Directory -Force -Path $saida | Out-Null
 Start-Transcript -Path (Join-Path $saida 'sem-ni.txt') -Force | Out-Null
 
-$envia = '$env:USERPROFILE\Documents\MikroDeck\mikrodeck\spike-hid\target\debug\envia.exe'
+$envia = "$env:USERPROFILE\Documents\MikroDeck\mikrodeck\spike-hid\target\debug\envia.exe"
 $vermelho = @('--preenche', '0x80', '0x07', '--tam', '81')   # cor 1, intensidade 3
 $branco  = @('--preenche', '0x80', '0x47', '--tam', '81')    # cor 17, intensidade 3
 

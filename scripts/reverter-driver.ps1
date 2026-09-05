@@ -4,7 +4,7 @@
 # O Zadig instala um pacote de driver da libwdi. Removendo o pacote, o Windows reinstala
 # sozinho o driver HID padrão, e o software da Native Instruments volta a enxergar o aparelho.
 
-$saida = '$env:USERPROFILE\AppData\Local\Temp\mikrodeck-captura'
+$saida = "$env:USERPROFILE\AppData\Local\Temp\mikrodeck-captura"
 New-Item -ItemType Directory -Force -Path $saida | Out-Null
 Start-Transcript -Path (Join-Path $saida 'reverter.txt') -Force | Out-Null
 

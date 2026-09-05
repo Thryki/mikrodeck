@@ -13,7 +13,7 @@ $ErrorActionPreference = 'Stop'
 $raiz = Split-Path -Parent $PSScriptRoot
 $usbpcap = 'C:\Program Files\USBPcap\USBPcapCMD.exe'
 $envia = Join-Path $raiz 'mikrodeck\spike-hid\target\debug\envia.exe'
-$saida = '$env:USERPROFILE\AppData\Local\Temp\mikrodeck-captura'
+$saida = "$env:USERPROFILE\AppData\Local\Temp\mikrodeck-captura"
 New-Item -ItemType Directory -Force -Path $saida | Out-Null
 
 # Grava tudo num log, para o Claude conseguir ler o que aconteceu mesmo se a janela fechar.
