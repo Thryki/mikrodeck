@@ -430,12 +430,15 @@ export function Aparelho({
             {!programado && b.id === "stop" && (
               <rect x={b.x + 7} y={b.y + 8.5} width="6" height="6" fill="#c8c7c2" />
             )}
-            {b.icone && !programado ? (
+            {/* Botão com ícone impresso mantém o ícone mesmo programado: o nome
+                não cabe aqui e vai para o painel e para a tela do aparelho. Ele
+                só fica mais claro, como os outros botões programados. */}
+            {b.icone ? (
               <Icone
                 nome={b.icone}
                 x={b.x + b.w / 2}
                 y={b.y + b.h / 2}
-                cor={apertado ? "#1f1f1e" : "#c8c7c2"}
+                cor={apertado ? "#1f1f1e" : programado ? "#F1EFE8" : "#c8c7c2"}
               />
             ) : (
               <>
