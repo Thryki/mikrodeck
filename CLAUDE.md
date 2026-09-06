@@ -338,6 +338,28 @@ som real** e pulam sozinhos numa maquina sem saida de audio.
 Falta: plugins nos samples (VST3/CLAP), que o proprio Davi deixou para bem
 depois.
 
+### Gestos de janela trocados (2026-09-06)
+
+Com a janela maximizada, dois toques para desmaximizar acabavam **minimizando**.
+O motivo esta no proprio gesto: o duplo toque so e reconhecido no segundo
+toque, e o primeiro ja executou o toque curto, que minimiza. O segundo chegava
+numa janela minimizada.
+
+Trocado a pedido do Davi, e a troca conserta isso de vez:
+
+| Gesto | Antes | Agora |
+|---|---|---|
+| Toque | abre, traz para a frente ou minimiza | igual |
+| Segurar | fecha | **maximiza, e desmaximiza se ja estiver** |
+| Dois toques | maximiza | **fecha** |
+
+Maximizar foi para o segurar porque segurar **nao passa pelo toque curto
+antes**. Fechar no duplo toque nao sofre do mesmo problema: fechar uma janela
+que o primeiro toque minimizou funciona igual.
+
+O gesto do **link** ficou como estava: segurar abre outra janela, dois toques
+maximizam. La nao ha o que fechar sem fechar o navegador inteiro.
+
 ### Cuidar da janela: tres bugs somados (2026-09-06)
 
 Apertar o pad abria o app, mas apertar de novo nao minimizava e segurar nao

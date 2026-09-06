@@ -244,8 +244,9 @@ export function PainelControle({
             <span>
               Cuidar da janela
               <span className="block text-neutral-500">
-                Apertar traz para a frente ou minimiza, segurar fecha. Com isso
-                ligado o pad age quando você solta, não quando aperta.
+                Um toque abre, traz para a frente ou minimiza. Segurar maximiza,
+                e segurar de novo desmaximiza. Dois toques rápidos fecham. Com
+                isso ligado o pad age quando você solta, não quando aperta.
               </span>
             </span>
           </label>

@@ -54,21 +54,27 @@ pub fn ao_soltar_link(segurado: Duration, desde_o_toque_anterior: Option<Duratio
 
 /// Decide o que fazer quando o pad é solto.
 ///
-/// Segurar fecha, mesmo que o programa pareça fechado: pode ser uma janela que a
-/// varredura de processos ainda não viu sumir, e fechar o que não existe não faz
-/// mal. Toque curto abre, ou alterna se já estiver aberto.
+/// Toque curto abre, ou alterna entre frente e minimizada se já estiver aberto.
+/// Segurar maximiza, e segurar de novo desmaximiza. Dois toques rápidos fecham.
+///
+/// Maximizar ficou no segurar, e não no toque duplo, por causa de como o gesto
+/// duplo acontece: o primeiro toque dele já minimizou a janela, e o segundo
+/// chegava numa janela minimizada. Com a janela maximizada, dar dois toques
+/// para desmaximizar acabava minimizando. Segurar não tem esse problema, porque
+/// não passa pelo toque curto antes.
 pub fn ao_soltar(
     segurado: Duration,
     aberto: bool,
     desde_o_toque_anterior: Option<Duration>,
 ) -> Depois {
     if segurado >= LIMIAR_SEGURAR {
-        return Depois::Fechar;
-    }
-    // Dois toques rápidos maximizam. O primeiro toque já trouxe a janela para a
-    // frente, então maximizar em seguida é a continuação natural do gesto.
-    if desde_o_toque_anterior.is_some_and(|d| d < JANELA_DUPLO_TOQUE) {
         return Depois::Maximizar;
+    }
+    // Fechar, mesmo que o programa pareça fechado: pode ser uma janela que a
+    // varredura de processos ainda não viu sumir, e fechar o que não existe não
+    // faz mal.
+    if desde_o_toque_anterior.is_some_and(|d| d < JANELA_DUPLO_TOQUE) {
+        return Depois::Fechar;
     }
     if aberto {
         Depois::AlternarFrente
@@ -411,9 +417,11 @@ mod testes {
     }
 
     #[test]
-    fn dois_toques_rapidos_maximizam() {
+    fn dois_toques_rapidos_fecham_o_programa() {
         let rapido = Some(Duration::from_millis(200));
-        assert_eq!(ao_soltar(Duration::from_millis(60), true, rapido), Depois::Maximizar);
+        assert_eq!(ao_soltar(Duration::from_millis(60), true, rapido), Depois::Fechar);
+        // No link, dois toques continuam maximizando: la nao ha o que fechar
+        // sem fechar o navegador inteiro.
         assert_eq!(
             ao_soltar_link(Duration::from_millis(60), rapido),
             DepoisNoLink::Maximizar
@@ -437,7 +445,7 @@ mod testes {
     fn segurar_ganha_do_duplo_toque() {
         // Se a pessoa segurou, é segurar, mesmo que o toque anterior tenha sido agora.
         let rapido = Some(Duration::from_millis(50));
-        assert_eq!(ao_soltar(Duration::from_secs(1), true, rapido), Depois::Fechar);
+        assert_eq!(ao_soltar(Duration::from_secs(1), true, rapido), Depois::Maximizar);
         assert_eq!(
             ao_soltar_link(Duration::from_secs(1), rapido),
             DepoisNoLink::AbrirOutra
@@ -485,11 +493,21 @@ mod testes {
     }
 
     #[test]
-    fn segurar_fecha_esteja_o_programa_como_estiver() {
-        assert_eq!(ao_soltar(LIMIAR_SEGURAR, true, None), Depois::Fechar);
+    fn segurar_maximiza_esteja_o_programa_como_estiver() {
+        assert_eq!(ao_soltar(LIMIAR_SEGURAR, true, None), Depois::Maximizar);
         assert_eq!(
             ao_soltar(Duration::from_secs(2), false, None),
-            Depois::Fechar
+            Depois::Maximizar
         );
+    }
+
+    #[test]
+    fn desmaximizar_nao_passa_por_minimizar() {
+        // Era a queixa: com a janela maximizada, dois toques para desmaximizar
+        // acabavam minimizando, porque o primeiro toque do gesto ja minimizava.
+        // Segurar nao passa pelo toque curto, entao vai direto.
+        let gesto = ao_soltar(Duration::from_secs(1), true, None);
+        assert_eq!(gesto, Depois::Maximizar);
+        assert_ne!(gesto, Depois::AlternarFrente);
     }
 }
