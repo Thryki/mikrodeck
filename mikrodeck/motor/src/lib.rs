@@ -16,6 +16,7 @@ pub mod prontas;
 pub mod rede;
 pub mod render;
 pub mod servico;
+pub mod som;
 pub mod vigias;
 
 pub use acoes::{Acao, TeclaMidia};

@@ -8,6 +8,7 @@
 
 import { useEffect, useState } from "react";
 import { escolherPrograma as escolher } from "./ponte";
+import PainelSample from "./PainelSample";
 import { CORES, NOMES_CORES, rotuloDaCor, type NomeCor } from "./cores";
 import type { Selecao } from "./Aparelho";
 import {
@@ -443,6 +444,14 @@ export function PainelControle({
             </Campo>
           )}
         </>
+      )}
+
+      {atual.acao.tipo === "sample" && (
+        <PainelSample
+          acao={atual.acao}
+          nome={atual.nome}
+          onMudar={(acao) => mudar({ acao })}
+        />
       )}
 
       {ehBotao ? (

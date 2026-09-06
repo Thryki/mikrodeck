@@ -20,7 +20,45 @@ export type Acao =
       metodo: MetodoHttp;
       cabecalhos: Record<string, string>;
       corpo: string | null;
+    }
+  | {
+      tipo: "sample";
+      caminho: string;
+      modo: ModoDisparo;
+      volume: number;
+      envelope: Envelope;
     };
+
+/** Como o pad dispara o sample. */
+export type ModoDisparo = "ate_o_fim" | "segurando";
+
+export const ROTULOS_MODO_DISPARO: Record<ModoDisparo, string> = {
+  ate_o_fim: "Apertou, toca até o fim",
+  segurando: "Toca enquanto estiver apertado",
+};
+
+/** Ataque, decaimento, sustentação e liberação do sample. */
+export interface Envelope {
+  ataque_ms: number;
+  decaimento_ms: number;
+  /** De 0 a 1. */
+  sustentacao: number;
+  liberacao_ms: number;
+}
+
+/** O envelope que não mexe no som: entra cheio e some rápido ao soltar. */
+export const ENVELOPE_PADRAO: Envelope = {
+  ataque_ms: 0,
+  decaimento_ms: 0,
+  sustentacao: 1,
+  liberacao_ms: 100,
+};
+
+/** Um microfone que o Windows enxerga. */
+export interface Microfone {
+  nome: string;
+  padrao: boolean;
+}
 
 export type MetodoHttp = "get" | "post" | "put";
 
@@ -219,6 +257,7 @@ export const ROTULOS_ACAO: Record<Acao["tipo"], string> = {
   pausar_retomar: "Ligar e desligar o MikroDeck",
   home_assistant: "Home Assistant",
   http: "Requisição HTTP",
+  sample: "Tocar um som",
 };
 
 export const ROTULOS_MIDIA: Record<TeclaMidia, string> = {
@@ -250,9 +289,23 @@ export function acaoVazia(tipo: Acao["tipo"]): Acao {
       return { tipo, servico: "", entidade: "" };
     case "http":
       return { tipo, url: "", metodo: "post", cabecalhos: {}, corpo: null };
+    case "sample":
+      return {
+        tipo,
+        caminho: "",
+        modo: "ate_o_fim",
+        volume: 1,
+        envelope: { ...ENVELOPE_PADRAO },
+      };
     default:
       return { tipo } as Acao;
   }
+}
+
+/** Só o nome do arquivo, sem o caminho inteiro. */
+export function nomeDoArquivo(caminho: string): string {
+  const partes = caminho.split(/[\\/]/);
+  return partes[partes.length - 1] || caminho;
 }
 
 /** Resumo curto da ação, para mostrar embaixo do nome do pad. */
@@ -274,6 +327,8 @@ export function resumoDaAcao(acao: Acao): string {
         : acao.servico || "serviço não escolhido";
     case "http":
       return acao.url || "endereço vazio";
+    case "sample":
+      return acao.caminho ? nomeDoArquivo(acao.caminho) : "som não escolhido";
     case "ir_para_pagina":
       return `página ${acao.numero}`;
     default:

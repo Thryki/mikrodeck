@@ -7,7 +7,7 @@
  * aparelho, inclusive de forma automatizada.
  */
 
-import type { Config, Situacao } from "./tipos";
+import type { Config, Microfone, Situacao } from "./tipos";
 
 export const DENTRO_DO_TAURI = "__TAURI_INTERNALS__" in window;
 
@@ -193,6 +193,68 @@ export async function escolherPrograma(): Promise<string | null> {
     filters: [{ name: "Programas", extensions: ["exe", "lnk", "bat", "cmd"] }],
   });
   return typeof caminho === "string" ? caminho : null;
+}
+
+/** Escolhe um arquivo de audio. No navegador, devolve um caminho de mentira. */
+export async function escolherSample(): Promise<string | null> {
+  if (!DENTRO_DO_TAURI) {
+    return "C:\Users\exemplo\Musica\bumbo.wav";
+  }
+  const { open } = await import("@tauri-apps/plugin-dialog");
+  const caminho = await open({
+    multiple: false,
+    filters: [
+      {
+        name: "Áudio",
+        extensions: ["wav", "mp3", "flac", "ogg", "m4a", "aac"],
+      },
+    ],
+  });
+  return typeof caminho === "string" ? caminho : null;
+}
+
+/** Os microfones que o Windows enxerga. */
+export async function microfones(): Promise<Microfone[]> {
+  if (!DENTRO_DO_TAURI) {
+    return [{ nome: "Microfone de exemplo", padrao: true }];
+  }
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<Microfone[]>("microfones");
+}
+
+/** Começa a gravar. Devolve o caminho do arquivo que vai ser escrito. */
+export async function gravarSample(
+  nome: string,
+  microfone: string | null,
+  segundos: number,
+): Promise<string> {
+  if (!DENTRO_DO_TAURI) return `C:\demo\${nome}.wav`;
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<string>("gravar_sample", { nome, microfone, segundos });
+}
+
+/** Para a gravação e devolve o caminho do arquivo pronto. */
+export async function pararGravacao(): Promise<string> {
+  if (!DENTRO_DO_TAURI) return "C:\demo\gravado.wav";
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<string>("parar_gravacao");
+}
+
+/** Quanto já foi gravado, em segundos. */
+export async function tempoDeGravacao(): Promise<number> {
+  if (!DENTRO_DO_TAURI) return 0;
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<number>("tempo_de_gravacao");
+}
+
+/** Toca o sample aqui no computador, para conferir. Devolve a duração. */
+export async function testarSample(
+  caminho: string,
+  volume: number,
+): Promise<number> {
+  if (!DENTRO_DO_TAURI) return 1;
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<number>("testar_sample", { caminho, volume });
 }
 
 type Remover = () => void;

@@ -308,6 +308,36 @@ existia em Configuracoes > Luz dos pads. O que estragava era o **descanso em 5
 segundos**, deixado de teste. Voltou para 90 s, e o modo padrao dele agora e
 Contorno, que nao mexe no brilho.
 
+### Samples de audio nos pads (2026-09-05)
+
+Saiu do "futuro" e entrou. Modulo `motor/src/som/`, separado de `audio.rs`
+(aquele e o volume do Windows, este toca som).
+
+| Peca | O que faz |
+|---|---|
+| `som/mod.rs` | `Saida` (placa de som + cache de arquivos decodificados), `Voz`, `Tocador` |
+| `som/envelope.rs` | ADSR como fonte que embrulha outra e multiplica o ganho |
+| `som/gravador.rs` | grava do microfone em WAV, teto de 60 s |
+
+Bibliotecas: `rodio` 0.21 (symphonia por baixo: wav, mp3, flac, ogg, m4a, aac),
+`cpal` 0.16 para a entrada, `hound` para escrever o WAV.
+
+Decisoes que valem manter:
+- O arquivo e decodificado **uma vez** e fica em memoria. Apertar o pad so
+  empurra um buffer pronto; nada de disco no caminho critico.
+- O sample **nao passa pela thread de acoes**. Quem toca e o `servico`, porque
+  soltar o pad precisa alcancar a mesma voz que o aperto comecou, e a thread de
+  acoes nao sabe de qual pad veio o evento.
+- Uma voz por pad: apertar de novo recomeca, nao empilha.
+- Sem placa de som o MikroDeck continua funcionando; so o sample nao toca.
+- Pausar corta todas as vozes: pausado, o aparelho volta a ser um Maschine.
+
+Testes: 156 no total. Cinco deles (`tests/som_de_verdade.rs`) usam a **placa de
+som real** e pulam sozinhos numa maquina sem saida de audio.
+
+Falta: plugins nos samples (VST3/CLAP), que o proprio Davi deixou para bem
+depois.
+
 ### Fluidez da luz (2026-09-05, tarde)
 
 O Davi achou a animacao travada. Eram duas causas somadas:

@@ -10,6 +10,11 @@ use std::sync::mpsc::{self, Sender};
 use std::sync::{Arc, RwLock};
 use std::thread;
 
+/// Volume padrao de um sample: cheio.
+fn volume_cheio() -> f32 {
+    1.0
+}
+
 /// Uma ação que o motor sabe executar.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "tipo", rename_all = "snake_case")]
@@ -45,6 +50,18 @@ pub enum Acao {
         servico: String,
         #[serde(default)]
         entidade: String,
+    },
+    /// Toca um sample de áudio. O disparo não passa pela thread de ações: o
+    /// serviço trata direto, porque soltar o pad precisa alcançar a mesma voz
+    /// que o aperto começou.
+    Sample {
+        caminho: String,
+        #[serde(default)]
+        modo: crate::som::ModoDisparo,
+        #[serde(default = "volume_cheio")]
+        volume: f32,
+        #[serde(default)]
+        envelope: crate::som::envelope::Envelope,
     },
     /// Requisição HTTP crua. Cobre webhook do Home Assistant e qualquer outro
     /// serviço da casa que aceite uma chamada.
@@ -141,6 +158,9 @@ fn executar(acao: &Acao, casa: &HomeAssistant) -> std::io::Result<()> {
     use std::process::Command;
     match acao {
         Acao::Nenhuma => Ok(()),
+        // O sample nao passa por aqui: quem toca e o servico, que e o unico que
+        // sabe de qual pad veio o aperto e para onde mandar o soltar.
+        Acao::Sample { .. } => Ok(()),
         Acao::AbrirPrograma {
             caminho,
             argumentos,

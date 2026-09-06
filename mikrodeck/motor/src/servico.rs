@@ -192,6 +192,9 @@ fn laco_de_eventos<F>(
     };
     // Quantos tiques rápidos já passaram, para ler o volume a cada quatro.
     let mut tiques_rapidos: u32 = 0;
+    // Os samples tocando, um por pad. Fica aqui, e não na thread de ações,
+    // porque soltar o pad precisa alcançar a mesma voz que o aperto começou.
+    let mut tocador = crate::som::Tocador::novo();
 
     // Pinta o estado inicial assim que conecta.
     repintar(aparelho, estado, abertos, None, false);
@@ -323,6 +326,9 @@ fn laco_de_eventos<F>(
                 }
                 Evento::PadSolto { pad } => {
                     compositor.segurando(None);
+                    // No modo "enquanto apertado" isto entra na liberação do
+                    // envelope; no "até o fim" não faz nada.
+                    tocador.soltar(*pad);
                     // Só ecoa o que foi apertado de verdade. O aparelho manda
                     // `PadSolto` também quando o dedo só encostou, e piscar num
                     // toque leve contradiz "toque leve não executa".
@@ -391,6 +397,13 @@ fn laco_de_eventos<F>(
             _ => {}
         }
 
+        // De qual pad veio este evento, se veio de um. O sample precisa saber:
+        // a voz fica guardada por pad, para o soltar achar a certa.
+        let pad_do_evento = match &evento {
+            Evento::PadApertado { pad, .. } | Evento::PadSolto { pad } => Some(*pad),
+            _ => None,
+        };
+
         let reacao = {
             let mut e = travar(estado);
             e.processar(&evento)
@@ -404,6 +417,27 @@ fn laco_de_eventos<F>(
         };
 
         match reacao {
+            // O sample toca aqui mesmo, sem passar pela fila de ações: o buffer
+            // já está em memória, então é rápido, e assim o soltar do pad
+            // alcança a voz certa.
+            Reacao::Executar(Acao::Sample {
+                caminho,
+                modo,
+                volume: volume_do_sample,
+                envelope,
+            }) => {
+                if let Some(pad) = pad_do_evento {
+                    if let Err(e) = tocador.tocar(
+                        pad,
+                        std::path::Path::new(&caminho),
+                        volume_do_sample,
+                        envelope,
+                        modo,
+                    ) {
+                        eprintln!("sample do pad {pad}: {e}");
+                    }
+                }
+            }
             Reacao::Executar(acao) => {
                 // A ligação com a casa pode ter mudado pela interface desde a última
                 // ação, e a thread de ações não enxerga o estado.
@@ -419,6 +453,9 @@ fn laco_de_eventos<F>(
             }
             Reacao::Pausado(pausado) => {
                 if pausado {
+                    // Pausado o aparelho volta a ser um Maschine comum, e som
+                    // nenhum pode sobrar tocando por cima.
+                    tocador.cortar_tudo();
                     // Sai de cena: apaga a tela e deixa o aparelho para o
                     // Maschine 2 ou para o que a pessoa quiser usar.
                     apagar_tela(aparelho);

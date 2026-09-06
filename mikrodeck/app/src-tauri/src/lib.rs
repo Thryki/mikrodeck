@@ -15,6 +15,9 @@ use tauri_plugin_autostart::ManagerExt;
 /// O motor vivo, guardado no estado do Tauri.
 struct MotorVivo(Mutex<Option<Servico>>);
 
+/// A gravação em curso, se houver. Uma por vez: duas disputariam o microfone.
+struct GravacaoVivo(Mutex<Option<motor::som::gravador::Gravacao>>);
+
 /// Situação do aparelho, no formato que a UI entende.
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "snake_case")]
@@ -173,6 +176,83 @@ fn previsualizar_descanso(motor: State<'_, MotorVivo>) -> Result<(), String> {
     let servico = guarda.as_ref().ok_or("motor não iniciado")?;
     servico.previsualizar_descanso();
     Ok(())
+}
+
+/// Microfones disponíveis, para o seletor da gravação.
+#[tauri::command]
+fn microfones() -> Vec<motor::som::gravador::Microfone> {
+    motor::som::gravador::microfones()
+}
+
+/// Começa a gravar um sample. O arquivo nasce em `~/.mikrodeck/samples`.
+///
+/// Só uma gravação por vez: gravar em dois pads ao mesmo tempo não faz sentido
+/// e disputaria o microfone.
+#[tauri::command]
+fn gravar_sample(
+    nome: String,
+    microfone: Option<String>,
+    segundos: u32,
+    gravacao: State<'_, GravacaoVivo>,
+) -> Result<String, String> {
+    let mut guarda = gravacao.0.lock().map_err(|e| e.to_string())?;
+    if guarda.is_some() {
+        return Err("já tem uma gravação em curso".into());
+    }
+    // O nome vem da interface: fica só o que dá nome de arquivo, para uma barra
+    // ou dois pontos não escreverem fora da pasta.
+    let limpo: String = nome
+        .chars()
+        .map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '-' })
+        .collect();
+    let limpo = limpo.trim_matches('-').to_string();
+    let limpo = if limpo.is_empty() { "sample".to_string() } else { limpo };
+    let caminho = motor::som::pasta_dos_samples().join(format!("{limpo}.wav"));
+    let g = motor::som::gravador::Gravacao::comecar(microfone.as_deref(), &caminho, segundos)?;
+    *guarda = Some(g);
+    Ok(caminho.to_string_lossy().to_string())
+}
+
+/// Para a gravação e devolve o caminho do arquivo.
+#[tauri::command]
+fn parar_gravacao(gravacao: State<'_, GravacaoVivo>) -> Result<String, String> {
+    let mut guarda = gravacao.0.lock().map_err(|e| e.to_string())?;
+    let g = guarda.take().ok_or("não tem gravação em curso")?;
+    let caminho = g.parar()?;
+    Ok(caminho.to_string_lossy().to_string())
+}
+
+/// Quanto já foi gravado, em segundos. Zero quando não há gravação.
+#[tauri::command]
+fn tempo_de_gravacao(gravacao: State<'_, GravacaoVivo>) -> f32 {
+    gravacao
+        .0
+        .lock()
+        .ok()
+        .and_then(|g| g.as_ref().map(|g| g.duracao().as_secs_f32()))
+        .unwrap_or(0.0)
+}
+
+/// Toca um sample aqui no computador, para a pessoa conferir antes de salvar.
+#[tauri::command]
+fn testar_sample(caminho: String, volume: f32) -> Result<f32, String> {
+    let saida = motor::som::Saida::nova();
+    let duracao = saida
+        .carregar(std::path::Path::new(&caminho))?
+        .duracao()
+        .as_secs_f32();
+    let voz = saida.tocar(
+        std::path::Path::new(&caminho),
+        volume,
+        motor::som::envelope::Envelope::default(),
+    )?;
+    // A saída morre no fim desta função e levaria o som junto, então espera o
+    // sample acabar. O teto de 30 s impede de travar a interface num arquivo longo.
+    let limite = std::time::Instant::now();
+    while !voz.acabou() && limite.elapsed().as_secs() < 30 {
+        std::thread::sleep(std::time::Duration::from_millis(30));
+    }
+    Ok(duracao)
 }
 
 /// Páginas prontas que a pessoa pode adicionar com um clique.
@@ -337,6 +417,7 @@ pub fn run() {
             None,
         ))
         .manage(MotorVivo(Mutex::new(None)))
+        .manage(GravacaoVivo(Mutex::new(None)))
         .invoke_handler(tauri::generate_handler![
             ler_config,
             salvar_config,
@@ -352,7 +433,12 @@ pub fn run() {
             definir_inicia_com_o_sistema,
             caminho_do_mcp,
             paginas_prontas,
-            adicionar_pagina_pronta
+            adicionar_pagina_pronta,
+            microfones,
+            gravar_sample,
+            parar_gravacao,
+            tempo_de_gravacao,
+            testar_sample
         ])
         .setup(|app| {
             let caminho = Config::caminho_padrao();
