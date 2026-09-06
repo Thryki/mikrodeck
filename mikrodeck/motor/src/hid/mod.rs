@@ -122,6 +122,13 @@ impl Aparelho {
             thread::Builder::new()
                 .name("mikrodeck-hid-escrita".into())
                 .spawn(move || {
+                    // Quantos tiques seguidos a tela ficou suja sem conseguir a
+                    // vez. Com a luz animando a 20 quadros por segundo, os LEDs
+                    // ganhariam sempre e o texto do descanso congelaria.
+                    let mut tela_esperando: u32 = 0;
+                    // Seis tiques a 30 Hz sao 200 ms: o texto anda cinco vezes
+                    // por segundo, que e o passo dele, e a luz mal sente a falta.
+                    const PACIENCIA_DA_TELA: u32 = 6;
                     while rodando.load(Ordering::Relaxed) {
                         // Uma coisa por tique, e os LEDs têm prioridade.
                         //
@@ -130,7 +137,17 @@ impl Aparelho {
                         // tique passa de 90 por segundo, e aí ele descarta pacote e as
                         // cores saem erradas. Espaçar resolve, e não custa nada: a tela
                         // muda raramente, então a espera de um tique não aparece.
-                        let pacote = {
+                        let tela_suja = tela.lock().expect("tela").esta_suja();
+                        if tela_suja {
+                            tela_esperando += 1;
+                        } else {
+                            tela_esperando = 0;
+                        }
+                        let ceder_a_vez = tela_esperando >= PACIENCIA_DA_TELA;
+
+                        let pacote = if ceder_a_vez {
+                            None
+                        } else {
                             let mut f = leds.lock().expect("frame de LEDs");
                             if f.esta_sujo() {
                                 let bytes = f.bytes().to_vec();
@@ -155,6 +172,7 @@ impl Aparelho {
                                 }
                             };
                             if let Some(pacotes) = pacotes_tela {
+                                tela_esperando = 0;
                                 for p in pacotes {
                                     let _ = dev_escrita.write(&p);
                                     // As duas metades da tela também precisam de fôlego

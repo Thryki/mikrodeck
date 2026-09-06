@@ -32,6 +32,32 @@ pub const CENTRO: [u8; 4] = [6, 7, 10, 11];
 pub const COLUNAS: [[u8; 4]; 4] = [[1, 5, 9, 13], [2, 6, 10, 14], [3, 7, 11, 15], [4, 8, 12, 16]];
 pub const VARREDURA: [usize; 6] = [0, 1, 2, 3, 2, 1];
 
+/// Comprimento do rastro do cometa, em pads. Atras da cabeca a luz demora a
+/// morrer; na frente ela ja comeca a nascer, mas bem mais curto. E a diferenca
+/// entre os dois que da a direcao do movimento.
+const RASTRO_TRAS: f32 = 3.2;
+const RASTRO_FRENTE: f32 = 0.9;
+
+/// Quanto um pad acende, de 0 a 1, pela distancia ate a cabeca. Distancia
+/// positiva e "ficou para tras". E a rampa disso que faz a luz escorregar de um
+/// pad para o outro em vez de pular: com a cabeca no meio do caminho, os dois
+/// vizinhos dividem o brilho.
+fn intensidade(distancia: f32) -> f32 {
+    let comprimento = if distancia >= 0.0 { RASTRO_TRAS } else { RASTRO_FRENTE };
+    (1.0 - distancia.abs() / comprimento).max(0.0)
+}
+
+/// Distancia de `k` ate a cabeca num ciclo de `n`, pelo caminho mais curto.
+fn distancia_ciclica(cabeca: f32, k: f32, n: f32) -> f32 {
+    let mut d = cabeca - k;
+    if d > n / 2.0 {
+        d -= n;
+    } else if d < -n / 2.0 {
+        d += n;
+    }
+    d
+}
+
 /// Quadro todo apagado.
 pub fn vazio() -> Quadro {
     [APAGADO; 16]
@@ -90,67 +116,103 @@ pub fn respiracao(
 }
 
 /// Contorno: um cometa percorre a borda e fecha no centro, com rastro.
-/// Cabeça em B, o pad anterior em B-1, e assim até o fraco; o resto apagado.
-/// A cor anda um passo na roda a cada volta, no salto do 7 para o 1.
-pub fn contorno(passo: u64, brilho: u8, cor: Option<Cor>) -> Quadro {
-    let n = CONTORNO.len() as u64;
-    let volta = passo / n;
-    let cabeca = (passo % n) as usize;
+///
+/// `pos` e a posicao da cabeca em pads, e vem fracionaria: com a cabeca em 4,5
+/// os pads 4 e 5 dividem o brilho, e e isso que faz o movimento parecer
+/// continuo mesmo com so quatro niveis de brilho no aparelho.
+/// A cor anda um passo na roda a cada volta.
+pub fn contorno(pos: f32, brilho: u8, cor: Option<Cor>) -> Quadro {
+    let n = CONTORNO.len() as f32;
+    let volta = (pos / n).floor().max(0.0) as u64;
+    let cabeca = pos.rem_euclid(n);
     let cor = matiz(cor, volta);
+    let teto = brilho.min(3);
     let mut q = vazio();
-    for atras in 0..=brilho.min(3) as usize {
-        let indice = (cabeca + CONTORNO.len() - atras) % CONTORNO.len();
-        let pad = CONTORNO[indice];
-        q[pad as usize - 1] = (cor, brilho.min(3) - atras as u8);
+    for (k, pad) in CONTORNO.iter().enumerate() {
+        let d = distancia_ciclica(cabeca, k as f32, n);
+        let nivel = (intensidade(d) * teto as f32).round() as u8;
+        // A cabeca acende mesmo com teto 0, senao o brilho 1 do aparelho
+        // deixaria a animacao invisivel.
+        if nivel > 0 || d.abs() < 0.5 {
+            q[*pad as usize - 1] = (cor, nivel.min(teto));
+        }
     }
     q
 }
 
 /// Colunas: uma coluna varre da esquerda para a direita e volta, sem salto.
-/// Coluna atual em B, a de onde ela veio no fraco, o resto apagado. A cor anda
-/// na roda a cada duas varreduras.
-pub fn colunas(passo: u64, brilho: u8, cor: Option<Cor>) -> Quadro {
-    let n = VARREDURA.len() as u64;
-    let cor = matiz(cor, passo / (2 * n));
-    let atual = VARREDURA[(passo % n) as usize];
-    let anterior = VARREDURA[((passo + n - 1) % n) as usize];
+///
+/// `pos` tambem e fracionaria, pelo mesmo motivo do Contorno: entre duas
+/// colunas as duas ficam meio acesas, e a onda desliza. A cor anda na roda a
+/// cada duas varreduras.
+pub fn colunas(pos: f32, brilho: u8, cor: Option<Cor>) -> Quadro {
+    let n = VARREDURA.len() as f32;
+    let volta = (pos / (2.0 * n)).floor().max(0.0) as u64;
+    let cor = matiz(cor, volta);
+    // Triangular: 0 ate 3 e de volta a 0, sem salto e sem canto duro.
+    let p = pos.rem_euclid(n);
+    let x = 3.0 - (3.0 - p).abs();
+    let teto = brilho.min(3);
     let mut q = vazio();
-    for pad in COLUNAS[anterior] {
-        q[pad as usize - 1] = (cor, 0);
-    }
-    for pad in COLUNAS[atual] {
-        q[pad as usize - 1] = (cor, brilho.min(3));
+    for (coluna, pads) in COLUNAS.iter().enumerate() {
+        // Simetrico: num vai e volta nao ha frente nem tras fixos.
+        let nivel = ((1.0 - (coluna as f32 - x).abs() / 1.6).max(0.0) * teto as f32).round() as u8;
+        let acende = nivel > 0 || (coluna as f32 - x).abs() < 0.5;
+        if acende {
+            for pad in pads {
+                q[*pad as usize - 1] = (cor, nivel.min(teto));
+            }
+        }
     }
     q
 }
 
-/// Quantos quadros um pulso tem para um teto de brilho: o centro desce de B
-/// até apagado e a borda vai um nível atrás.
-pub fn quadros_do_pulso(brilho: u8) -> u64 {
-    brilho.min(3) as u64 + 3
+/// Quanto dura a parte ativa de um pulso, em passos do ritmo. O resto do
+/// período é espera com os pads apagados.
+pub fn passos_do_pulso(brilho: u8) -> f32 {
+    brilho.min(3) as f32 + 3.0
 }
 
-/// Pulso: uma gota no centro se espalha para a borda e some. Devolve `None`
-/// nos quadros de espera, em que nada muda e não vale escrita.
-pub fn pulso(quadro: u64, brilho: u8, cor: Option<Cor>, numero_do_pulso: u64) -> Option<Quadro> {
-    let b = brilho.min(3) as i16;
-    if quadro >= quadros_do_pulso(brilho) {
+/// Distância de um pad ao centro do quadrado de 4 por 4, em pads.
+/// Os quatro do meio ficam a 0,71; os cantos a 2,12.
+fn distancia_do_centro(pad: u8) -> f32 {
+    let i = (pad - 1) as f32;
+    let coluna = i % 4.0;
+    let linha = (i / 4.0).floor();
+    ((coluna - 1.5).powi(2) + (linha - 1.5).powi(2)).sqrt()
+}
+
+/// Pulso: uma onda circular sai do centro e some na borda.
+///
+/// `fase` vai de 0 a 1 na parte ativa; acima de 1 é espera e devolve `None`,
+/// que não vale escrita. O anel tem posição fracionária, então ele atravessa os
+/// pads em vez de saltar de anel em anel.
+pub fn pulso(fase: f32, brilho: u8, cor: Option<Cor>, numero_do_pulso: u64) -> Option<Quadro> {
+    if !(0.0..=1.0).contains(&fase) {
         return None;
     }
+    let teto = brilho.min(3) as f32;
     let cor = matiz(cor, numero_do_pulso);
-    // Nível do centro cai um por quadro a partir de B; a borda começa um quadro
-    // depois. Nível -1 é apagado.
-    let centro = b - quadro as i16;
-    let borda = b - quadro as i16 + 1;
+    // O raio passa de 2,12 para a onda sair pelos cantos antes de acabar.
+    let raio = fase * 2.9;
+    // E a onda inteira enfraquece no fim, para o pulso morrer sem corte seco.
+    let desvanecer = 1.0 - fase * fase;
     let mut q = vazio();
+    let mut algum = false;
     for pad in 1..=16u8 {
-        let no_centro = CENTRO.contains(&pad);
-        let nivel = if no_centro { centro } else { borda };
-        if nivel >= 0 && (no_centro || quadro >= 1) {
-            q[pad as usize - 1] = (cor, nivel.min(b) as u8);
+        let d = distancia_do_centro(pad) - raio;
+        let nivel = ((1.0 - d.abs() / 1.1).max(0.0) * desvanecer * teto).round() as u8;
+        if nivel > 0 {
+            q[pad as usize - 1] = (cor, nivel.min(brilho.min(3)));
+            algum = true;
         }
     }
-    Some(q)
+    // Quadro todo apagado no meio do caminho não vale escrita.
+    if algum {
+        Some(q)
+    } else {
+        None
+    }
 }
 
 /// Adormecer: as cores da página caindo B, B-1, 0 em três passos.
@@ -186,7 +248,7 @@ mod testes {
     fn contorno_segue_a_lista_do_davi() {
         // A cabeça (o único pad no brilho máximo) passa pela lista na ordem.
         for (passo, esperado) in CONTORNO.iter().enumerate() {
-            let q = contorno(passo as u64, 2, None);
+            let q = contorno(passo as f32, 2, None);
             let cabeca = q
                 .iter()
                 .position(|(c, b)| *c != Cor::Apagado && *b == 2)
@@ -197,15 +259,15 @@ mod testes {
 
     #[test]
     fn contorno_troca_de_cor_a_cada_volta() {
-        let antes = contorno(15, 2, None);
-        let depois = contorno(16, 2, None);
+        let antes = contorno(15.0, 2, None);
+        let depois = contorno(16.0, 2, None);
         let cor_de = |q: &Quadro| q.iter().find(|(c, _)| *c != Cor::Apagado).map(|(c, _)| *c);
         assert_ne!(cor_de(&antes), cor_de(&depois));
     }
 
     #[test]
     fn contorno_com_brilho_zero_e_um_ponto_sem_rastro() {
-        let q = contorno(3, 0, None);
+        let q = contorno(3.0, 0, None);
         assert_eq!(q.iter().filter(|(c, _)| *c != Cor::Apagado).count(), 1);
     }
 
@@ -213,7 +275,7 @@ mod testes {
     fn colunas_vai_e_volta_sem_salto() {
         let ordem: Vec<usize> = (0..6)
             .map(|p| {
-                let q = colunas(p, 2, None);
+                let q = colunas(p as f32, 2, None);
                 let pad = q.iter().position(|(c, b)| *c != Cor::Apagado && *b == 2).unwrap() as u8 + 1;
                 (pad as usize - 1) % 4
             })
@@ -253,9 +315,9 @@ mod testes {
     fn um_matiz_por_quadro() {
         for passo in 0..40u64 {
             for q in [
-                contorno(passo, 3, None),
-                colunas(passo, 3, None),
-                pulso(passo % 6, 3, None, passo).unwrap_or_else(vazio),
+                contorno(passo as f32, 3, None),
+                colunas(passo as f32, 3, None),
+                pulso((passo % 6) as f32 / 6.0, 3, None, passo).unwrap_or_else(vazio),
             ] {
                 let cores: std::collections::HashSet<Cor> =
                     q.iter().filter(|(c, _)| *c != Cor::Apagado).map(|(c, _)| *c).collect();
@@ -269,9 +331,9 @@ mod testes {
         for b in 0..=3u8 {
             for passo in 0..40u64 {
                 for q in [
-                    contorno(passo, b, None),
-                    colunas(passo, b, None),
-                    pulso(passo % 6, b, None, 0).unwrap_or_else(vazio),
+                    contorno(passo as f32, b, None),
+                    colunas(passo as f32, b, None),
+                    pulso((passo % 6) as f32 / 6.0, b, None, 0).unwrap_or_else(vazio),
                     respiracao(&pagina_cheia(), b, None, passo * 100, 4000),
                     adormecer(&pagina_cheia(), b, passo % 3),
                 ] {
@@ -286,14 +348,48 @@ mod testes {
     }
 
     #[test]
-    fn pulso_comeca_no_centro_e_termina_apagado() {
-        let primeiro = pulso(0, 2, None, 0).unwrap();
+    fn pulso_sai_do_centro_e_chega_na_borda() {
+        // No comeco a onda esta no centro; no fim, nos cantos.
+        let comeco = pulso(0.0, 3, None, 0).unwrap();
         for pad in CENTRO {
-            assert_eq!(primeiro[pad as usize - 1].1, 2);
+            assert!(comeco[pad as usize - 1].1 > 0, "centro apagado no comeco");
         }
-        assert_eq!(primeiro[0], APAGADO, "a borda so entra no segundo quadro");
-        let ultimo = pulso(quadros_do_pulso(2) - 1, 2, None, 0).unwrap();
-        assert!(ultimo.iter().all(|(c, _)| *c == Cor::Apagado));
-        assert_eq!(pulso(quadros_do_pulso(2), 2, None, 0), None, "depois e espera");
+        assert_eq!(comeco[0], APAGADO, "o canto acendeu antes da hora");
+
+        let media: Vec<f32> = (0..=10)
+            .map(|i| {
+                let q = pulso(i as f32 / 10.0, 3, None, 0).unwrap_or_else(vazio);
+                let soma: f32 = (1..=16u8)
+                    .map(|pad| q[pad as usize - 1].1 as f32 * distancia_do_centro(pad))
+                    .sum();
+                let peso: f32 = (1..=16u8).map(|pad| q[pad as usize - 1].1 as f32).sum();
+                if peso > 0.0 { soma / peso } else { f32::NAN }
+            })
+            .filter(|x| !x.is_nan())
+            .collect();
+        assert!(media.len() >= 5, "poucos quadros com luz: {media:?}");
+        assert!(
+            media.last().unwrap() > media.first().unwrap(),
+            "a onda nao se afastou do centro: {media:?}"
+        );
+    }
+
+    #[test]
+    fn pulso_fora_da_fase_e_espera() {
+        assert_eq!(pulso(1.5, 3, None, 0), None);
+        assert_eq!(pulso(-0.1, 3, None, 0), None);
+    }
+
+    #[test]
+    fn o_anel_do_pulso_anda_sem_saltar() {
+        // Entre dois quadros vizinhos o desenho nunca muda de todos os pads de
+        // uma vez: e isso que separa um movimento continuo de um piscar.
+        let mut anterior = pulso(0.0, 3, None, 0).unwrap();
+        for i in 1..=20 {
+            let Some(q) = pulso(i as f32 / 20.0, 3, None, 0) else { break };
+            let mudaram = (0..16).filter(|&k| q[k] != anterior[k]).count();
+            assert!(mudaram <= 12, "{mudaram} pads mudaram de uma vez no quadro {i}");
+            anterior = q;
+        }
     }
 }

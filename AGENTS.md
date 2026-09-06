@@ -219,7 +219,7 @@ O que está pronto e provado no aparelho:
   de ponta a ponta: chamada MCP acendeu pad no aparelho sem reiniciar nada.
 - A config é vigiada em disco: mudou por fora, o motor aplica em até 1 segundo.
 - Vigia de processos: o pad muda de cor sozinho quando o programa está aberto.
-- Páginas prontas: Spotify, Claude, Casa e Trabalho, adicionadas sem sobrescrever nada.
+- Páginas prontas: Spotify, Codex, Casa e Trabalho, adicionadas sem sobrescrever nada.
 - Cuidar da janela (opcional por pad): apertar alterna a frente, segurar fecha.
 - Toque leve no pad mostra o nome na tela sem executar.
 - A touch strip acende como medidor do que ela controla (volume, brilho, página).
@@ -307,28 +307,6 @@ slider de brilho e nao agradam. A opcao de ligar, desligar e trocar de modo ja
 existia em Configuracoes > Luz dos pads. O que estragava era o **descanso em 5
 segundos**, deixado de teste. Voltou para 90 s, e o modo padrao dele agora e
 Contorno, que nao mexe no brilho.
-
-### Fluidez da luz (2026-09-05, tarde)
-
-O Davi achou a animacao travada. Eram duas causas somadas:
-
-1. `PASSO_MINIMO` de 125 ms: teto de 8 quadros por segundo. Agora 50 ms, 20 por
-   segundo. O aparelho aceita cerca de 31 escritas por segundo e a tela no
-   descanso usa umas 4, entao cabe.
-2. O movimento andava de pad em pad, em degrau. Agora a posicao da cabeca e
-   **fracionaria**: com ela em 4,5 os pads 4 e 5 dividem o brilho. E isso que
-   da movimento continuo com so quatro niveis de brilho.
-
-Contorno e Colunas ganharam rastro por rampa (`intensidade`, com cauda longa
-atras e curta na frente, o que da a direcao). O Pulso virou onda circular de
-verdade: cada pad tem distancia ate o centro, e o raio cresce em fracao.
-
-Para a tela nao ficar sem vez com o LED escrevendo 20 vezes por segundo, a
-thread de escrita conta os tiques em que a tela ficou suja e cede a vez depois
-de 6 (200 ms, o passo do texto correndo).
-
-Regra que mudou: **o ritmo nao manda mais na taxa de quadros**, so na velocidade
-da cabeca. Quem manda na taxa e o passo minimo.
 
 ### Bug das teclas de pontuacao
 

@@ -10,6 +10,7 @@
 pub mod modos;
 
 use crate::config::{AoApertar, CorLuz, LuzDescanso, ModoLuz, Ritmo};
+use modos::passos_do_pulso;
 use crate::hid::Cor;
 use std::time::{Duration, Instant};
 
@@ -19,9 +20,14 @@ pub type Quadro = [(Cor, u8); 16];
 /// Pad apagado num quadro.
 pub const APAGADO: (Cor, u8) = (Cor::Apagado, 0);
 
-/// Passo mínimo em todo modo: teto duro de 8 quadros por segundo, não importa
+/// Passo mínimo em todo modo: teto duro de 20 quadros por segundo, não importa
 /// a frequência do laço. É a primeira trava do orçamento de escritas.
-pub const PASSO_MINIMO: Duration = Duration::from_millis(125);
+///
+/// Era 125 ms (8 por segundo) e o movimento saía picotado. O aparelho aceita
+/// cerca de 31 escritas por segundo; 20 para a luz deixam 11 para a tela, que
+/// no descanso só precisa de umas 4. Quem garante que a tela não fica sem vez é
+/// a thread de escrita, não este número.
+pub const PASSO_MINIMO: Duration = Duration::from_millis(50);
 
 /// Os três passos do adormecer, antes de o modo começar.
 const ADORMECER: Duration = Duration::from_millis(750);
@@ -175,22 +181,23 @@ impl Animador {
                 Some(modos::adormecer(repouso, brilho, passo))
             }
             ModoLuz::Contorno => {
-                let passo = passos(passado - ADORMECER, passo_ms(self.luz.ritmo));
-                Some(modos::contorno(passo, brilho, cor))
+                let pos = posicao(passado - ADORMECER, passo_ms(self.luz.ritmo));
+                Some(modos::contorno(pos, brilho, cor))
             }
             ModoLuz::Colunas => {
-                let passo = passos(passado - ADORMECER, passo_ms(self.luz.ritmo));
-                Some(modos::colunas(passo, brilho, cor))
+                let pos = posicao(passado - ADORMECER, passo_ms(self.luz.ritmo));
+                Some(modos::colunas(pos, brilho, cor))
             }
             ModoLuz::Pulso => {
                 let periodo = periodo_ms(self.luz.ritmo);
-                let t = (passado - ADORMECER).as_millis() as u64;
+                let t = quantizar(passado - ADORMECER).as_millis() as u64;
                 let numero = t / periodo;
-                // Os quadros do pulso andam no passo do ritmo, não no passo mínimo:
-                // no médio são 5 quadros em 1,25 s, como o desenho pede. O resto do
-                // período é espera, em que `pulso` devolve None e o quadro apaga.
-                let quadro = (t % periodo) / passo_ms(self.luz.ritmo).max(1);
-                Some(modos::pulso(quadro, brilho, cor, numero).unwrap_or_else(modos::vazio))
+                // A parte ativa dura uns poucos passos do ritmo; o resto do
+                // período é espera. A fase vai de 0 a 1 dentro da parte ativa, e
+                // é fracionária, para o anel atravessar os pads sem saltar.
+                let ativo = passos_do_pulso(brilho) * passo_ms(self.luz.ritmo) as f32;
+                let fase = (t % periodo) as f32 / ativo.max(1.0);
+                Some(modos::pulso(fase, brilho, cor, numero).unwrap_or_else(modos::vazio))
             }
             ModoLuz::Som => None,
         }
@@ -220,10 +227,17 @@ fn passos(passado: Duration, passo_ms: u64) -> u64 {
     (passado.as_millis() / passo_ms.max(1) as u128) as u64
 }
 
+/// Posição da cabeça em passos, fracionária. É o que deixa o movimento
+/// contínuo: entre dois pads, os dois acendem em meio-termo.
+fn posicao(passado: Duration, passo_ms: u64) -> f32 {
+    quantizar(passado).as_millis() as f32 / passo_ms.max(1) as f32
+}
+
 /// Arredonda o tempo para o laço de 25 ms, para a Respiração não gerar quadros
 /// diferentes por diferença de microssegundos.
 fn quantizar(d: Duration) -> Duration {
-    Duration::from_millis((d.as_millis() / 25 * 25) as u64)
+    let passo = PASSO_MINIMO.as_millis().max(1);
+    Duration::from_millis((d.as_millis() / passo * passo) as u64)
 }
 
 #[cfg(test)]
@@ -265,8 +279,10 @@ mod testes {
 
     #[test]
     fn orcamento_de_escritas() {
-        // Teto: 8 quadros por segundo, mais os 3 do adormecer. Todo modo novo
-        // entra aqui antes de entrar no aparelho.
+        // Teto: 20 quadros por segundo, mais os 3 do adormecer. O aparelho
+        // aceita cerca de 31 escritas por segundo no total, e a tela no
+        // descanso precisa de umas 4. Todo modo novo entra aqui antes de
+        // entrar no aparelho.
         for modo in [
             ModoLuz::Nenhuma,
             ModoLuz::Respiracao,
@@ -279,7 +295,7 @@ mod testes {
                 for brilho in 0..=3u8 {
                     let n = quadros_em_10s(modo, ritmo, brilho);
                     assert!(
-                        n <= 80 + 3,
+                        n <= 200 + 3,
                         "{modo:?} {ritmo:?} B={brilho}: {n} quadros em 10 s"
                     );
                 }
@@ -289,9 +305,11 @@ mod testes {
 
     #[test]
     fn contorno_rapido_fica_perto_do_previsto() {
-        // 150 ms por passo: uns 6,7 por segundo, mais o adormecer.
+        // Com o movimento continuo o passo do ritmo nao manda mais na taxa de
+        // quadros: manda o passo minimo, 50 ms. O ritmo muda a velocidade da
+        // cabeca, nao quantas vezes por segundo a luz e reescrita.
         let n = quadros_em_10s(ModoLuz::Contorno, Ritmo::Rapido, 2);
-        assert!((55..=70).contains(&n), "{n}");
+        assert!((170..=203).contains(&n), "{n}");
     }
 
     #[test]
@@ -324,20 +342,31 @@ mod testes {
     }
 
     #[test]
-    fn pulso_anda_no_passo_do_ritmo() {
-        // No medio o passo e 250 ms: cinco quadros em 1,25 s, como o desenho pede.
+    fn pulso_repete_no_periodo_do_ritmo() {
+        // O ritmo manda em quantos pulsos por minuto, nao mais em quantos
+        // quadros por segundo: a onda e continua e anda a 20 por segundo.
         let mut a = Animador::novo(luz(ModoLuz::Pulso, Ritmo::Medio), AoApertar::Nenhuma);
         let t0 = Instant::now();
         let repouso = pagina();
-        // Passa o adormecer (750 ms) e mede quando o quadro muda.
-        let mut trocas = 0;
-        for ms in (750..2000).step_by(25) {
-            if a.tique(t0 + Duration::from_millis(ms), true, 2, &repouso, None) {
-                trocas += 1;
-            }
+        let mut acesos = Vec::new();
+        for ms in (750..9000).step_by(50) {
+            a.tique(t0 + Duration::from_millis(ms), true, 3, &repouso, None);
+            let n = a
+                .quadro()
+                .map(|q| q.iter().filter(|(c, _)| *c != Cor::Apagado).count())
+                .unwrap_or(0);
+            acesos.push((ms, n));
         }
-        // Cinco quadros de pulso em 1,25 s, e nao dez.
-        assert!((4..=6).contains(&trocas), "{trocas} trocas em 1,25 s");
+        // Duas partes ativas em 8 s, com o periodo medio de 4 s.
+        let mut inicios = 0;
+        let mut estava_apagado = true;
+        for (_, n) in &acesos {
+            if *n > 0 && estava_apagado {
+                inicios += 1;
+            }
+            estava_apagado = *n == 0;
+        }
+        assert!((2..=3).contains(&inicios), "{inicios} pulsos em 8 s");
     }
 
     #[test]
