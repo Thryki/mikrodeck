@@ -71,10 +71,8 @@ fn soltar_no_modo_segurando_encurta_o_som() {
     // Cinco segundos de audio, mas o pad e solto em 200 ms com liberacao de 100.
     let caminho = wav("segurando", 5.0);
     let envelope = Envelope {
-        ataque_ms: 0,
-        decaimento_ms: 0,
-        sustentacao: 1.0,
         liberacao_ms: 100,
+        ..Envelope::default()
     };
     tocador
         .tocar(3, &caminho, 0.5, envelope, ModoDisparo::Segurando)

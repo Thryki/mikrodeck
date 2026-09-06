@@ -138,12 +138,20 @@ impl Gravacao {
             .unwrap_or(true)
     }
 
-    /// Para e espera o arquivo fechar. Devolve o caminho do WAV.
+    /// Para, espera o arquivo fechar e apara o silêncio das pontas.
+    /// Devolve o caminho do WAV.
     pub fn parar(mut self) -> Result<PathBuf, String> {
         self.parar.store(true, Ordering::Relaxed);
         match self.fim.take() {
             Some(f) => match f.recv() {
-                Ok(Ok(())) => Ok(self.caminho.clone()),
+                Ok(Ok(())) => {
+                    // O silencio antes de a pessoa falar e depois de ela parar
+                    // morre aqui, sem ela precisar pedir.
+                    if let Err(e) = aparar_silencio(&self.caminho) {
+                        eprintln!("nao consegui aparar o silencio: {e}");
+                    }
+                    Ok(self.caminho.clone())
+                }
                 Ok(Err(e)) => Err(e),
                 Err(_) => Err("a gravacao morreu sem dizer o porque".into()),
             },
@@ -240,6 +248,90 @@ fn gravar(
     Ok(())
 }
 
+/// Abaixo disto conta como silêncio. Uns -46 dB: baixo o bastante para pegar
+/// só o chiado do microfone, alto o bastante para não comer o começo suave de
+/// um som de verdade.
+pub const LIMIAR_DE_SILENCIO: f32 = 0.005;
+
+/// Quanto de silêncio fica de cada lado, em milissegundos. Cortar rente dá
+/// estalo no começo e engole a cauda no fim.
+pub const MARGEM_MS: u32 = 30;
+
+/// Onde começa e onde acaba o som de verdade, em quadros.
+///
+/// Devolve `None` quando o arquivo inteiro é silêncio. Fora da função de
+/// arquivo de propósito: assim o teste roda sobre um vetor, sem tocar no disco.
+pub fn faixa_com_som(
+    amostras: &[f32],
+    canais: u16,
+    taxa: u32,
+) -> Option<(usize, usize)> {
+    let canais = canais.max(1) as usize;
+    let quadros = amostras.len() / canais;
+    if quadros == 0 {
+        return None;
+    }
+    let alto = |quadro: usize| {
+        amostras[quadro * canais..(quadro + 1) * canais]
+            .iter()
+            .any(|a| a.abs() > LIMIAR_DE_SILENCIO)
+    };
+    let primeiro = (0..quadros).find(|q| alto(*q))?;
+    let ultimo = (0..quadros).rev().find(|q| alto(*q))?;
+    let margem = (taxa.max(1) as u64 * MARGEM_MS as u64 / 1000) as usize;
+    Some((
+        primeiro.saturating_sub(margem),
+        (ultimo + margem + 1).min(quadros),
+    ))
+}
+
+/// Reescreve o WAV sem o silêncio das pontas.
+///
+/// É o que o Davi pediu: gravou, o silêncio morre sozinho. Se o arquivo for só
+/// silêncio, ele fica como está: apagar o que a pessoa acabou de gravar seria
+/// pior do que deixar um arquivo mudo que ela pode ouvir e refazer.
+pub fn aparar_silencio(caminho: &Path) -> Result<Duration, String> {
+    let mut leitor = hound::WavReader::open(caminho)
+        .map_err(|e| format!("nao consegui reabrir {}: {e}", caminho.display()))?;
+    let spec = leitor.spec();
+    let amostras: Vec<f32> = match spec.sample_format {
+        hound::SampleFormat::Float => leitor.samples::<f32>().filter_map(|a| a.ok()).collect(),
+        hound::SampleFormat::Int => {
+            let escala = (1i64 << (spec.bits_per_sample - 1)) as f32;
+            leitor
+                .samples::<i32>()
+                .filter_map(|a| a.ok())
+                .map(|a| a as f32 / escala)
+                .collect()
+        }
+    };
+    let canais = spec.channels.max(1) as usize;
+    let Some((inicio, fim)) = faixa_com_som(&amostras, spec.channels, spec.sample_rate) else {
+        return Ok(Duration::ZERO);
+    };
+    let recorte = &amostras[inicio * canais..(fim * canais).min(amostras.len())];
+    let mut w = hound::WavWriter::create(caminho, spec)
+        .map_err(|e| format!("nao consegui reescrever {}: {e}", caminho.display()))?;
+    match spec.sample_format {
+        hound::SampleFormat::Float => {
+            for a in recorte {
+                w.write_sample(*a).map_err(|e| e.to_string())?;
+            }
+        }
+        hound::SampleFormat::Int => {
+            let escala = (1i64 << (spec.bits_per_sample - 1)) as f32;
+            for a in recorte {
+                let v = (a * escala).clamp(-escala, escala - 1.0) as i32;
+                w.write_sample(v).map_err(|e| e.to_string())?;
+            }
+        }
+    }
+    w.finalize().map_err(|e| e.to_string())?;
+    Ok(Duration::from_secs_f64(
+        (fim - inicio) as f64 / spec.sample_rate.max(1) as f64,
+    ))
+}
+
 #[cfg(test)]
 mod testes {
     use super::*;
@@ -256,6 +348,112 @@ mod testes {
             panic!("achou um microfone que nao existe");
         };
         assert!(e.contains("Microfone Que Nao Existe"), "{e}");
+    }
+
+    /// Meio segundo de silencio, meio de som, meio de silencio.
+    fn com_silencio_nas_pontas(taxa: u32) -> Vec<f32> {
+        let meio = (taxa / 2) as usize;
+        let mut v = vec![0.0f32; meio];
+        for i in 0..meio {
+            v.push((i as f32 / 20.0).sin() * 0.5);
+        }
+        v.extend(std::iter::repeat_n(0.0f32, meio));
+        v
+    }
+
+    #[test]
+    fn a_faixa_com_som_pula_o_silencio_das_pontas() {
+        let taxa = 8000;
+        let v = com_silencio_nas_pontas(taxa);
+        let (inicio, fim) = faixa_com_som(&v, 1, taxa).unwrap();
+        let margem = (taxa * MARGEM_MS / 1000) as usize;
+        // Comeca uma margem antes do som e acaba uma margem depois. O seno
+        // cruza o zero, entao o primeiro quadro alto pode ser o 4000 ou o 4001.
+        assert!(
+            (4000 - margem..=4002 - margem).contains(&inicio),
+            "inicio em {inicio}"
+        );
+        assert!(
+            (8000 + margem..=8000 + margem + 2).contains(&fim),
+            "fim em {fim}"
+        );
+    }
+
+    #[test]
+    fn a_margem_nao_estoura_os_limites_do_arquivo() {
+        // Som do primeiro ao ultimo quadro: a margem nao pode sair do arquivo.
+        let v: Vec<f32> = (0..1000).map(|i| (i as f32).sin() * 0.5).collect();
+        let (inicio, fim) = faixa_com_som(&v, 1, 8000).unwrap();
+        assert_eq!(inicio, 0);
+        assert_eq!(fim, 1000);
+    }
+
+    #[test]
+    fn arquivo_so_de_silencio_nao_tem_faixa() {
+        assert_eq!(faixa_com_som(&vec![0.0; 1000], 1, 8000), None);
+        assert_eq!(faixa_com_som(&[], 1, 8000), None);
+        // Chiado abaixo do limiar tambem conta como silencio.
+        assert_eq!(faixa_com_som(&vec![0.001; 1000], 1, 8000), None);
+    }
+
+    #[test]
+    fn o_estereo_conta_quadro_e_nao_amostra() {
+        // Dois canais: o som comeca no quadro 2, que e a amostra 4.
+        let v = vec![0.0, 0.0, 0.0, 0.0, 0.9, 0.9, 0.0, 0.0];
+        let (inicio, fim) = faixa_com_som(&v, 2, 1000).unwrap();
+        assert_eq!((inicio, fim), (0, 4), "contou amostra em vez de quadro");
+    }
+
+    #[test]
+    fn aparar_encurta_o_arquivo_de_verdade() {
+        let taxa = 8000;
+        let caminho = std::env::temp_dir().join("mikrodeck-teste-aparar.wav");
+        let spec = hound::WavSpec {
+            channels: 1,
+            sample_rate: taxa,
+            bits_per_sample: 32,
+            sample_format: hound::SampleFormat::Float,
+        };
+        let mut w = hound::WavWriter::create(&caminho, spec).unwrap();
+        for a in com_silencio_nas_pontas(taxa) {
+            w.write_sample(a).unwrap();
+        }
+        w.finalize().unwrap();
+
+        let antes = hound::WavReader::open(&caminho).unwrap().duration();
+        let duracao = aparar_silencio(&caminho).unwrap();
+        let depois = hound::WavReader::open(&caminho).unwrap().duration();
+
+        assert!(depois < antes, "nao cortou nada: {antes} -> {depois}");
+        // Sobra o meio segundo de som mais as duas margens.
+        let esperado = taxa / 2 + 2 * (taxa * MARGEM_MS / 1000);
+        assert!(
+            depois.abs_diff(esperado) < 100,
+            "sobrou {depois}, esperava perto de {esperado}"
+        );
+        assert!((duracao.as_secs_f32() - 0.56).abs() < 0.05, "{duracao:?}");
+        let _ = std::fs::remove_file(&caminho);
+    }
+
+    #[test]
+    fn aparar_um_arquivo_mudo_deixa_ele_como_esta() {
+        // Apagar o que a pessoa acabou de gravar seria pior do que devolver um
+        // arquivo mudo que ela pode ouvir e refazer.
+        let caminho = std::env::temp_dir().join("mikrodeck-teste-mudo.wav");
+        let spec = hound::WavSpec {
+            channels: 1,
+            sample_rate: 8000,
+            bits_per_sample: 32,
+            sample_format: hound::SampleFormat::Float,
+        };
+        let mut w = hound::WavWriter::create(&caminho, spec).unwrap();
+        for _ in 0..8000 {
+            w.write_sample(0.0f32).unwrap();
+        }
+        w.finalize().unwrap();
+        assert_eq!(aparar_silencio(&caminho).unwrap(), Duration::ZERO);
+        assert_eq!(hound::WavReader::open(&caminho).unwrap().duration(), 8000);
+        let _ = std::fs::remove_file(&caminho);
     }
 
     #[test]

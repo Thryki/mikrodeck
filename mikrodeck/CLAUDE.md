@@ -338,6 +338,32 @@ som real** e pulam sozinhos numa maquina sem saida de audio.
 Falta: plugins nos samples (VST3/CLAP), que o proprio Davi deixou para bem
 depois.
 
+### Envelope como o de um plugin, e o silencio que morre sozinho
+
+Pedido do Davi com um print do envelope do FL Studio.
+
+O `Envelope` ganhou os estagios que faltavam: **atraso**, **retencao** e duas
+**tensoes** (curva da subida e curva da descida). A tensao e expoente
+(`x^(2^-t*2)`), escolhido porque assim a curva nunca sai da faixa de 0 a 1 e,
+principalmente, **nao muda a duracao do estagio**: mexer na curva nao pode
+mudar quanto tempo o som dura.
+
+`EnvelopeGrafico.tsx` desenha a curva com as alcas arrastaveis. A conta de
+`curvar` esta repetida em TypeScript de proposito: o desenho tem que ser a
+mesma curva que o motor toca.
+
+Dois detalhes que so apareceram testando com Playwright:
+1. Com os estagios em zero as cinco alcas caem no mesmo ponto. Cada estagio
+   agora ocupa uma **largura minima** de 14 unidades no desenho.
+2. Mesmo assim o alvo de clique de uma alca cobria o da vizinha. O raio do
+   alvo virou **metade da folga ate o vizinho**, entre 4 e 14.
+O arrasto escuta a **janela**, nao o SVG: preso ao SVG, sair do desenho com o
+botao apertado largava o no no meio do caminho.
+
+Gravacao: `aparar_silencio` corta o silencio das duas pontas quando a gravacao
+fecha, com margem de 30 ms e limiar de 0,005 (uns -46 dB). Arquivo so de
+silencio fica como esta: apagar o que a pessoa acabou de gravar seria pior.
+
 ### Fluidez da luz (2026-09-05, tarde)
 
 O Davi achou a animacao travada. Eram duas causas somadas:

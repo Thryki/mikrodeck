@@ -15,6 +15,7 @@ import {
   tempoDeGravacao,
   testarSample,
 } from "./ponte";
+import EnvelopeGrafico from "./EnvelopeGrafico";
 import {
   ENVELOPE_PADRAO,
   nomeDoArquivo,
@@ -230,43 +231,108 @@ export default function PainelSample({ acao, nome, onMudar }: Props) {
             Voltar ao padrão
           </button>
         </div>
-        <div className="grid grid-cols-2 gap-3">
+
+        <EnvelopeGrafico
+          envelope={acao.envelope}
+          onMudar={(envelope) => onMudar({ ...acao, envelope })}
+        />
+
+        <p className="mt-2 text-xs text-neutral-500">
+          Arraste as bolinhas. A da sustentação também sobe e desce.
+        </p>
+
+        <div className="mt-3 grid grid-cols-3 gap-2">
           <Numero
-            rotulo="Ataque (ms)"
+            rotulo="Atraso"
+            valor={acao.envelope.atraso_ms}
+            onMudar={(v) => mudarEnvelope({ atraso_ms: v })}
+          />
+          <Numero
+            rotulo="Ataque"
             valor={acao.envelope.ataque_ms}
             onMudar={(v) => mudarEnvelope({ ataque_ms: v })}
           />
           <Numero
-            rotulo="Decaimento (ms)"
+            rotulo="Retenção"
+            valor={acao.envelope.retencao_ms}
+            onMudar={(v) => mudarEnvelope({ retencao_ms: v })}
+          />
+          <Numero
+            rotulo="Decaimento"
             valor={acao.envelope.decaimento_ms}
             onMudar={(v) => mudarEnvelope({ decaimento_ms: v })}
           />
+          <Numero
+            rotulo="Liberação"
+            valor={acao.envelope.liberacao_ms}
+            onMudar={(v) => mudarEnvelope({ liberacao_ms: v })}
+          />
           <div>
             <label className="mb-1 block text-xs text-neutral-600 dark:text-neutral-400">
-              Sustentação: {Math.round(acao.envelope.sustentacao * 100)}%
+              Sustentação
             </label>
             <input
-              type="range"
+              type="number"
               min={0}
               max={100}
               value={Math.round(acao.envelope.sustentacao * 100)}
               onChange={(e) =>
-                mudarEnvelope({ sustentacao: Number(e.target.value) / 100 })
+                mudarEnvelope({
+                  sustentacao: Math.min(1, Math.max(0, Number(e.target.value) / 100)),
+                })
               }
-              className="w-full"
+              className={entrada}
             />
           </div>
-          <Numero
-            rotulo="Liberação (ms)"
-            valor={acao.envelope.liberacao_ms}
-            onMudar={(v) => mudarEnvelope({ liberacao_ms: v })}
+        </div>
+
+        <div className="mt-3 grid grid-cols-2 gap-3">
+          <Tensao
+            rotulo="Curva da subida"
+            valor={acao.envelope.tensao_ataque}
+            onMudar={(v) => mudarEnvelope({ tensao_ataque: v })}
+          />
+          <Tensao
+            rotulo="Curva da descida"
+            valor={acao.envelope.tensao_queda}
+            onMudar={(v) => mudarEnvelope({ tensao_queda: v })}
           />
         </div>
+
         <p className="mt-2 text-xs text-neutral-500">
           A liberação só aparece no modo que toca enquanto está apertado: é o
           tempo que o som leva para sumir depois que você solta.
         </p>
       </div>
+    </div>
+  );
+}
+
+function Tensao({
+  rotulo,
+  valor,
+  onMudar,
+}: {
+  rotulo: string;
+  valor: number;
+  onMudar: (v: number) => void;
+}) {
+  return (
+    <div>
+      <label className="mb-1 block text-xs text-neutral-600 dark:text-neutral-400">
+        {rotulo}
+        {Math.abs(valor) < 0.01 ? " (reta)" : ` (${valor.toFixed(2)})`}
+      </label>
+      <input
+        type="range"
+        min={-100}
+        max={100}
+        value={Math.round(valor * 100)}
+        onChange={(e) => onMudar(Number(e.target.value) / 100)}
+        onDoubleClick={() => onMudar(0)}
+        title="Dois cliques voltam para a reta"
+        className="w-full"
+      />
     </div>
   );
 }

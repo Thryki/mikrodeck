@@ -9,12 +9,22 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
-/// O envelope, em milissegundos, com a sustentação de 0 a 1.
+/// O envelope, em milissegundos, com a sustentação e as tensões de 0 a 1.
+///
+/// Os estágios são os mesmos de um plugin: atraso, ataque, retenção,
+/// decaimento, sustentação e liberação. As duas tensões curvam a subida e a
+/// descida, como as duas alças de tensão do desenho.
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub struct Envelope {
+    /// Silêncio antes de o som começar a subir.
+    #[serde(default = "zero")]
+    pub atraso_ms: u32,
     /// Quanto o som demora para chegar no volume cheio.
     #[serde(default = "zero")]
     pub ataque_ms: u32,
+    /// Quanto ele fica no cheio antes de começar a cair.
+    #[serde(default = "zero")]
+    pub retencao_ms: u32,
     /// Quanto ele demora para cair do cheio até a sustentação.
     #[serde(default = "zero")]
     pub decaimento_ms: u32,
@@ -24,6 +34,12 @@ pub struct Envelope {
     /// Quanto ele demora para sumir depois que o pad é solto.
     #[serde(default = "cem")]
     pub liberacao_ms: u32,
+    /// Curva da subida, de -1 a 1. Zero é reta.
+    #[serde(default = "zero_f")]
+    pub tensao_ataque: f32,
+    /// Curva das descidas (decaimento e liberação), de -1 a 1. Zero é reta.
+    #[serde(default = "zero_f")]
+    pub tensao_queda: f32,
 }
 
 fn zero() -> u32 {
@@ -35,32 +51,65 @@ fn cem() -> u32 {
 fn um() -> f32 {
     1.0
 }
+fn zero_f() -> f32 {
+    0.0
+}
 
 impl Default for Envelope {
     /// O padrão não muda nada no som: entra cheio, fica cheio, e some rápido
     /// quando solta, só para não estalar.
     fn default() -> Self {
         Self {
+            atraso_ms: 0,
             ataque_ms: 0,
+            retencao_ms: 0,
             decaimento_ms: 0,
             sustentacao: 1.0,
             liberacao_ms: 100,
+            tensao_ataque: 0.0,
+            tensao_queda: 0.0,
         }
     }
 }
 
+/// Curva uma fração de 0 a 1 pela tensão.
+///
+/// Tensão zero é reta. Positiva sobe rápido e assenta no fim; negativa demora a
+/// sair e corre no fim. É a mesma ideia das alças de tensão de um plugin, feita
+/// com expoente porque assim ela nunca sai da faixa de 0 a 1.
+pub fn curvar(x: f32, tensao: f32) -> f32 {
+    let x = x.clamp(0.0, 1.0);
+    let t = tensao.clamp(-1.0, 1.0);
+    if t.abs() < 0.001 {
+        return x;
+    }
+    x.powf(2f32.powf(-t * 2.0))
+}
+
 impl Envelope {
+    /// Quanto tempo o envelope leva do começo até chegar na sustentação.
+    pub fn ate_a_sustentacao_ms(&self) -> u32 {
+        self.atraso_ms + self.ataque_ms + self.retencao_ms + self.decaimento_ms
+    }
+
     /// Ganho de 0 a 1 no instante `t`, com o pad ainda apertado.
     pub fn ganho_segurando(&self, t: Duration) -> f32 {
         let ms = t.as_secs_f32() * 1000.0;
         let s = self.sustentacao.clamp(0.0, 1.0);
+        let atraso = self.atraso_ms as f32;
         let a = self.ataque_ms as f32;
+        let h = self.retencao_ms as f32;
         let d = self.decaimento_ms as f32;
-        if ms < a {
+        if ms < atraso {
+            0.0
+        } else if ms < atraso + a {
             // Sem ataque, `a` é zero e este ramo nem roda.
-            ms / a
-        } else if ms < a + d {
-            1.0 - (1.0 - s) * (ms - a) / d
+            curvar((ms - atraso) / a, self.tensao_ataque)
+        } else if ms < atraso + a + h {
+            1.0
+        } else if ms < atraso + a + h + d {
+            let fracao = (ms - atraso - a - h) / d;
+            1.0 - (1.0 - s) * curvar(fracao, self.tensao_queda)
         } else {
             s
         }
@@ -73,7 +122,8 @@ impl Envelope {
             return 0.0;
         }
         let ms = desde_o_solto.as_secs_f32() * 1000.0;
-        (nivel_no_solto * (1.0 - ms / r)).max(0.0)
+        let fracao = (ms / r).clamp(0.0, 1.0);
+        (nivel_no_solto * (1.0 - curvar(fracao, self.tensao_queda))).max(0.0)
     }
 
     /// Se o som já acabou de sumir depois de soltar.
@@ -195,6 +245,7 @@ mod testes {
             decaimento_ms: 200,
             sustentacao: 0.5,
             liberacao_ms: 300,
+            ..Envelope::default()
         }
     }
 
@@ -228,6 +279,79 @@ mod testes {
     }
 
     #[test]
+    fn o_atraso_segura_o_som_no_zero() {
+        let e = Envelope {
+            atraso_ms: 200,
+            ataque_ms: 100,
+            ..Envelope::default()
+        };
+        assert_eq!(e.ganho_segurando(Duration::from_millis(0)), 0.0);
+        assert_eq!(e.ganho_segurando(Duration::from_millis(199)), 0.0);
+        // O ataque comeca depois do atraso, nao do zero.
+        assert!((e.ganho_segurando(Duration::from_millis(250)) - 0.5).abs() < 0.02);
+        assert!((e.ganho_segurando(Duration::from_millis(300)) - 1.0).abs() < 0.02);
+    }
+
+    #[test]
+    fn a_retencao_segura_no_cheio_antes_de_cair() {
+        let e = Envelope {
+            ataque_ms: 100,
+            retencao_ms: 300,
+            decaimento_ms: 200,
+            sustentacao: 0.0,
+            ..Envelope::default()
+        };
+        for ms in [100, 200, 350, 399] {
+            let g = e.ganho_segurando(Duration::from_millis(ms));
+            assert!((g - 1.0).abs() < 0.01, "caiu cedo em {ms} ms: {g}");
+        }
+        // Passada a retencao, o decaimento comeca.
+        assert!(e.ganho_segurando(Duration::from_millis(500)) < 0.6);
+    }
+
+    #[test]
+    fn a_tensao_curva_sem_sair_da_faixa() {
+        // Em qualquer tensao a curva sai do zero, chega no um e nao passa disso.
+        for tensao in [-1.0, -0.5, 0.0, 0.5, 1.0] {
+            assert_eq!(curvar(0.0, tensao), 0.0);
+            assert!((curvar(1.0, tensao) - 1.0).abs() < 0.001);
+            for i in 0..=10 {
+                let y = curvar(i as f32 / 10.0, tensao);
+                assert!((0.0..=1.0).contains(&y), "tensao {tensao} deu {y}");
+            }
+        }
+    }
+
+    #[test]
+    fn tensao_positiva_sobe_mais_rapido_que_a_reta() {
+        let meio_reta = curvar(0.5, 0.0);
+        assert!(curvar(0.5, 1.0) > meio_reta, "positiva devia subir antes");
+        assert!(curvar(0.5, -1.0) < meio_reta, "negativa devia demorar");
+    }
+
+    #[test]
+    fn a_tensao_nao_muda_quando_o_som_acaba() {
+        // A curva muda o caminho, nunca a duracao: senao mexer na tensao
+        // mudaria quanto tempo o som dura, que nao e o que se espera.
+        let reto = Envelope { liberacao_ms: 300, ..Envelope::default() };
+        let curvo = Envelope { tensao_queda: 0.8, ..reto };
+        assert_eq!(reto.terminou(Duration::from_millis(299)), curvo.terminou(Duration::from_millis(299)));
+        assert_eq!(reto.terminou(Duration::from_millis(300)), curvo.terminou(Duration::from_millis(300)));
+    }
+
+    #[test]
+    fn ate_a_sustentacao_soma_os_quatro_primeiros_estagios() {
+        let e = Envelope {
+            atraso_ms: 10,
+            ataque_ms: 20,
+            retencao_ms: 30,
+            decaimento_ms: 40,
+            ..Envelope::default()
+        };
+        assert_eq!(e.ate_a_sustentacao_ms(), 100);
+    }
+
+    #[test]
     fn o_envelope_padrao_nao_mexe_no_som() {
         let e = Envelope::default();
         for ms in [0, 1, 100, 5000] {
@@ -253,10 +377,8 @@ mod testes {
         let fonte = SamplesBuffer::new(1, 1000, vec![1.0f32; 1000]);
         let solto = Arc::new(AtomicBool::new(false));
         let e = Envelope {
-            ataque_ms: 0,
-            decaimento_ms: 0,
-            sustentacao: 1.0,
             liberacao_ms: 100,
+            ..Envelope::default()
         };
         let mut com = ComEnvelope::novo(fonte, e, solto.clone());
         // 100 quadros com o pad apertado: ganho cheio.

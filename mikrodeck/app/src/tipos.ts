@@ -37,22 +37,45 @@ export const ROTULOS_MODO_DISPARO: Record<ModoDisparo, string> = {
   segurando: "Toca enquanto estiver apertado",
 };
 
-/** Ataque, decaimento, sustentação e liberação do sample. */
+/** O envelope do sample, com os mesmos estágios de um plugin. */
 export interface Envelope {
+  /** Silêncio antes de o som começar a subir. */
+  atraso_ms: number;
   ataque_ms: number;
+  /** Quanto fica no cheio antes de começar a cair. */
+  retencao_ms: number;
   decaimento_ms: number;
   /** De 0 a 1. */
   sustentacao: number;
   liberacao_ms: number;
+  /** Curva da subida, de -1 a 1. Zero é reta. */
+  tensao_ataque: number;
+  /** Curva das descidas, de -1 a 1. Zero é reta. */
+  tensao_queda: number;
 }
 
 /** O envelope que não mexe no som: entra cheio e some rápido ao soltar. */
 export const ENVELOPE_PADRAO: Envelope = {
+  atraso_ms: 0,
   ataque_ms: 0,
+  retencao_ms: 0,
   decaimento_ms: 0,
   sustentacao: 1,
   liberacao_ms: 100,
+  tensao_ataque: 0,
+  tensao_queda: 0,
 };
+
+/**
+ * Curva uma fração de 0 a 1 pela tensão. É a mesma conta do motor
+ * (`som/envelope.rs`), repetida aqui para o desenho bater com o som.
+ */
+export function curvar(x: number, tensao: number): number {
+  const f = Math.min(1, Math.max(0, x));
+  const t = Math.min(1, Math.max(-1, tensao));
+  if (Math.abs(t) < 0.001) return f;
+  return Math.pow(f, Math.pow(2, -t * 2));
+}
 
 /** Um microfone que o Windows enxerga. */
 export interface Microfone {
