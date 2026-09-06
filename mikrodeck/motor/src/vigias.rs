@@ -39,11 +39,73 @@ impl Abertos {
     /// arquivo: o caminho configurado pode ser um atalho, e o processo que sobe
     /// tem outro caminho.
     pub fn tem(&self, caminho: &str) -> bool {
-        let Some(nome) = nome_do_executavel(caminho) else {
+        let pistas = pistas_de_processo(caminho);
+        if pistas.is_empty() {
             return false;
-        };
-        self.0.read().map(|s| s.contains(&nome)).unwrap_or(false)
+        }
+        self.0
+            .read()
+            .map(|abertos| pistas.iter().any(|n| abertos.contains(n)))
+            .unwrap_or(false)
     }
+}
+
+/// Nomes de executável que este caminho pode ter virado, em minúsculas e com
+/// `.exe`.
+///
+/// Caminho comum dá uma pista só, que é o próprio nome do arquivo. App do menu
+/// Iniciar é outra história: o identificador
+/// `shell:appsFolder\Raycast.Raycast_qypenmj9wpt2a!Raycast` não contém o nome
+/// do processo em lugar nenhum óbvio, e sem isso o "cuidar da janela" não acha
+/// a janela para minimizar nem para fechar. Daí duas pistas: o que vem depois
+/// do `!`, que costuma ser o nome do programa, e o último pedaço do nome do
+/// pacote, que costuma ser parecido com ele.
+pub fn pistas_de_processo(caminho: &str) -> Vec<String> {
+    let limpo = caminho.trim().trim_matches('"');
+    if !crate::apps::e_da_loja(limpo) {
+        return nome_do_executavel(limpo).into_iter().collect();
+    }
+    let id = limpo
+        .split_once(crate::apps::PREFIXO_LOJA)
+        .map(|(_, resto)| resto)
+        .unwrap_or(limpo)
+        .trim();
+    // Muito item do menu Iniciar e atalho para um arquivo, e o identificador
+    // dele carrega o caminho: `{GUID}\7-Zip\7zFM.exe`. Ai o nome do processo
+    // esta ali na cara, e nao ha o que adivinhar.
+    if id.contains('\\') || id.to_lowercase().ends_with(".exe") {
+        return nome_do_executavel(id).into_iter().collect();
+    }
+    let (pacote, apelido) = match id.split_once('!') {
+        Some((p, a)) => (p, Some(a)),
+        None => (id, None),
+    };
+    // `Raycast.Raycast_qypenmj9wpt2a` vira `raycast`; `Brave` continua `brave`.
+    let do_pacote = pacote
+        .split_once('_')
+        .map(|(antes, _)| antes)
+        .unwrap_or(pacote)
+        .rsplit('.')
+        .next()
+        .unwrap_or(pacote);
+    let mut pistas = Vec::new();
+    for bruta in [apelido.unwrap_or(""), do_pacote] {
+        let nome = bruta.trim().to_lowercase();
+        // "app" e apelido generico de meio mundo: como pista, casaria com
+        // qualquer coisa e traria a janela errada.
+        if nome.is_empty() || nome == "app" {
+            continue;
+        }
+        let com_exe = if nome.ends_with(".exe") {
+            nome
+        } else {
+            format!("{nome}.exe")
+        };
+        if !pistas.contains(&com_exe) {
+            pistas.push(com_exe);
+        }
+    }
+    pistas
 }
 
 /// Nome do executável a partir de um caminho de configuração, em minúsculas e
@@ -115,6 +177,59 @@ fn processos_abertos() -> HashSet<String> {
 
 #[cfg(test)]
 mod testes {
+    #[test]
+    fn app_do_menu_iniciar_da_pistas_de_processo() {
+        // O identificador nao tem o nome do processo em lugar nenhum obvio, e
+        // sem estas pistas o "cuidar da janela" nao acha a janela do Raycast.
+        let p = pistas_de_processo(
+            r"shell:appsFolder\Raycast.Raycast_qypenmj9wpt2a!Raycast",
+        );
+        assert!(p.contains(&"raycast.exe".to_string()), "{p:?}");
+    }
+
+    #[test]
+    fn app_sem_apelido_usa_o_nome_do_pacote() {
+        let p = pistas_de_processo(r"shell:appsFolder\Chrome");
+        assert_eq!(p, vec!["chrome.exe".to_string()]);
+    }
+
+    #[test]
+    fn pacote_com_dominio_fica_com_o_ultimo_pedaco() {
+        let p = pistas_de_processo(
+            r"shell:appsFolder\SpotifyAB.SpotifyMusic_zpdnekdrzrea0!Spotify",
+        );
+        assert!(p.contains(&"spotify.exe".to_string()), "{p:?}");
+        assert!(p.contains(&"spotifymusic.exe".to_string()), "{p:?}");
+    }
+
+    #[test]
+    fn atalho_com_caminho_dentro_do_identificador_usa_o_arquivo() {
+        // Muito item do menu Iniciar e atalho, e o identificador carrega o
+        // caminho. Sem tratar isso, a pista virava "exe.exe".
+        let p = pistas_de_processo(
+            r"shell:appsFolder\{6D809377-6AF0-444B-8957-A3773F02200E}\7-Zip\7zFM.exe",
+        );
+        assert_eq!(p, vec!["7zfm.exe".to_string()]);
+    }
+
+    #[test]
+    fn apelido_generico_nao_vira_pista() {
+        // "App" e apelido de meio mundo: como pista, traria a janela errada.
+        let p = pistas_de_processo(r"shell:appsFolder\OpenAI.Codex_2p2nqsd0c76g0!App");
+        assert!(!p.contains(&"app.exe".to_string()), "{p:?}");
+        assert_eq!(p, vec!["codex.exe".to_string()]);
+    }
+
+    #[test]
+    fn caminho_comum_continua_dando_uma_pista_so() {
+        assert_eq!(
+            pistas_de_processo(r"C:\Program Files\Notepad++\notepad++.exe"),
+            vec!["notepad++.exe".to_string()]
+        );
+        assert_eq!(pistas_de_processo("spotify.exe"), vec!["spotify.exe".to_string()]);
+        assert!(pistas_de_processo("").is_empty());
+    }
+
     use super::*;
 
     #[test]

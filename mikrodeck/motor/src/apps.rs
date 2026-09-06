@@ -43,9 +43,13 @@ pub fn listar() -> Result<Vec<App>, String> {
             "-NoProfile",
             "-NonInteractive",
             "-Command",
+            // A primeira linha força UTF-8 na saída: sem ela o console
+            // devolve a página de código antiga e "Configurações" chega
+            // quebrado.
+            //
             // O separador é uma barra vertical dupla: nome de app tem de tudo,
             // menos isso.
-            "Get-StartApps | ForEach-Object { \"$($_.Name)||$($_.AppID)\" }",
+            "[Console]::OutputEncoding=[Text.Encoding]::UTF8;              Get-StartApps | ForEach-Object { \"$($_.Name)||$($_.AppID)\" }",
         ])
         .output()
         .map_err(|e| format!("nao consegui listar os programas: {e}"))?;
@@ -83,6 +87,12 @@ pub fn separar(texto: &str) -> Vec<App> {
     apps.sort_by(|a, b| a.nome.to_lowercase().cmp(&b.nome.to_lowercase()));
     apps.dedup_by(|a, b| a.caminho == b.caminho);
     apps
+}
+
+/// As pistas de nome de processo deste caminho. Reexporta o que o `vigias`
+/// calcula, para quem só conhece o módulo de apps.
+pub fn pistas_publicas(caminho: &str) -> Vec<String> {
+    crate::vigias::pistas_de_processo(caminho)
 }
 
 #[cfg(test)]

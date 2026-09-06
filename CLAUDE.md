@@ -338,6 +338,38 @@ som real** e pulam sozinhos numa maquina sem saida de audio.
 Falta: plugins nos samples (VST3/CLAP), que o proprio Davi deixou para bem
 depois.
 
+### Cuidar da janela: tres bugs somados (2026-09-06)
+
+Apertar o pad abria o app, mas apertar de novo nao minimizava e segurar nao
+fechava. Eram tres coisas empilhadas, e a terceira valia para **todo** programa,
+nao so para app do menu Iniciar.
+
+1. **O nome do processo vinha errado.** Com o caminho do menu Iniciar,
+   `nome_do_executavel` devolvia
+   `raycast.raycast_qypenmj9wpt2a!raycast.exe`, que nao existe. Agora
+   `pistas_de_processo` extrai palpites do identificador: o que vem depois do
+   `!` e o ultimo pedaco do nome do pacote. Item que carrega caminho dentro do
+   identificador (`{GUID}-ZipzFM.exe`, que e a maioria) usa o arquivo
+   direto, e o apelido generico "App" nao vira pista, senao casaria com meio
+   Windows. A busca ganhou uma terceira tentativa, por nome parecido, com mais
+   de quatro letras para nao casar demais.
+2. **So minimizava se a janela em foco fosse a primeira da lista.** Programa
+   costuma ter varias janelas, entao o gesto caia sempre no "traz para a
+   frente" de quem ja estava na frente. Agora basta **alguma** janela do
+   programa estar na frente, e todas minimizam juntas.
+3. **`SetForegroundWindow` era recusado.** O Windows nao deixa um programa sem
+   foco roubar a frente, e o MikroDeck nunca tem foco: quem apertou o pad
+   estava usando outra coisa. Provado no teste, o foco simplesmente nao mudava.
+   O jeito aceito e grudar a nossa fila de entrada na da janela que esta na
+   frente com `AttachThreadInput`; enquanto estao grudadas, o Windows trata
+   como a mesma interacao e deixa passar.
+
+Medido depois: traz para a frente (`em foco: WindowsTerminal.exe`) e minimiza
+(`minimizada: true`), com o caminho do menu Iniciar.
+
+A lista de apps tambem saia com acento quebrado: a saida do PowerShell vem na
+pagina de codigo do console, e agora o comando forca UTF-8.
+
 ### Atalho que nao saia, e a lista de programas (2026-09-06)
 
 O Davi configurou a lupa com o atalho `win` para abrir o Raycast e nada

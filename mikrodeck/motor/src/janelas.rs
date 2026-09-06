@@ -120,15 +120,56 @@ mod windows_impl {
     use windows_sys::Win32::System::Threading::{
         OpenProcess, QueryFullProcessImageNameW, PROCESS_QUERY_LIMITED_INFORMATION,
     };
+    use windows_sys::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::SetActiveWindow;
     use windows_sys::Win32::UI::WindowsAndMessaging::{
-        EnumWindows, GetForegroundWindow, GetWindowTextLengthW, GetWindowTextW,
+        BringWindowToTop, EnumWindows, GetForegroundWindow, GetWindowTextLengthW, GetWindowTextW,
         GetWindowThreadProcessId, IsIconic, IsWindowVisible, IsZoomed, PostMessageW,
         SetForegroundWindow, ShowWindow, SW_MAXIMIZE, SW_MINIMIZE, SW_RESTORE, WM_CLOSE,
     };
 
+    /// Traz a janela para a frente de verdade.
+    ///
+    /// `SetForegroundWindow` sozinho quase sempre é recusado: o Windows não
+    /// deixa um programa sem foco roubar a frente, e o MikroDeck nunca tem
+    /// foco, porque quem apertou o pad estava usando outra coisa. O jeito
+    /// aceito é grudar a nossa fila de entrada na da janela que está na frente:
+    /// enquanto estão grudadas, o Windows nos trata como parte da mesma
+    /// interação e deixa passar.
+    unsafe fn trazer_para_frente(janela: HWND) {
+        unsafe {
+            let meu = GetCurrentThreadId();
+            let da_frente = {
+                let f = GetForegroundWindow();
+                if f.is_null() {
+                    0
+                } else {
+                    GetWindowThreadProcessId(f, std::ptr::null_mut())
+                }
+            };
+            let dela = GetWindowThreadProcessId(janela, std::ptr::null_mut());
+            let grudar = |outro: u32, ligar: i32| {
+                if outro != 0 && outro != meu {
+                    AttachThreadInput(meu, outro, ligar);
+                }
+            };
+            grudar(da_frente, 1);
+            grudar(dela, 1);
+
+            ShowWindow(janela, SW_RESTORE);
+            BringWindowToTop(janela);
+            SetForegroundWindow(janela);
+            SetActiveWindow(janela);
+
+            grudar(dela, 0);
+            grudar(da_frente, 0);
+        }
+    }
+
     struct Busca {
-        /// Nome do executável configurado, em minúsculas.
-        alvo: String,
+        /// Nomes de executável que o programa configurado pode ter, em
+        /// minúsculas. App do menu Iniciar dá mais de um palpite.
+        alvos: Vec<String>,
         /// Pasta de instalação do programa, em minúsculas. Serve de segunda
         /// tentativa: um lançador abre janela com outro nome, mas mora na mesma
         /// pasta. `git-bash.exe` abre `mintty.exe`, os dois debaixo de
@@ -136,22 +177,40 @@ mod windows_impl {
         pasta: Option<String>,
         achadas: Vec<HWND>,
         por_pasta: Vec<HWND>,
+        /// Terceira tentativa: nome parecido. `Microsoft.WindowsCalculator`
+        /// abre `Calculator.exe`, e um contém o outro sem serem iguais.
+        parecidas: Vec<HWND>,
+    }
+
+    /// Se dois nomes de executável são o mesmo programa.
+    ///
+    /// Igualdade primeiro. Depois, um contendo o outro, com pelo menos quatro
+    /// letras: sem esse mínimo, uma pista curta casaria com meio Windows.
+    fn casa(exe: &str, alvo: &str) -> bool {
+        let corte = |s: &str| s.strip_suffix(".exe").unwrap_or(s).to_string();
+        let (a, b) = (corte(exe), corte(alvo));
+        a == b || (a.len() >= 4 && b.len() >= 4 && (a.contains(&b) || b.contains(&a)))
     }
 
     /// Aplica a ação nas janelas do programa. Devolve `false` se não achou nenhuma.
     pub fn agir(caminho: &str, alvo: Alvo) -> bool {
         let mut busca = Busca {
-            alvo: super::nome_do_executavel(caminho).unwrap_or_default(),
+            alvos: crate::vigias::pistas_de_processo(caminho),
             pasta: super::pasta_do_programa(caminho),
             achadas: Vec::new(),
             por_pasta: Vec::new(),
+            parecidas: Vec::new(),
         };
         unsafe {
             EnumWindows(Some(visitar), &mut busca as *mut Busca as LPARAM);
         }
-        // Nome exato primeiro; só se não achar, cai na pasta de instalação.
+        // Nome exato primeiro; depois a pasta de instalação; por último o
+        // nome parecido, que é o palpite mais frouxo dos três.
         if busca.achadas.is_empty() {
             busca.achadas = std::mem::take(&mut busca.por_pasta);
+        }
+        if busca.achadas.is_empty() {
+            busca.achadas = std::mem::take(&mut busca.parecidas);
         }
         let Some(&janela) = busca.achadas.first() else {
             return false;
@@ -171,17 +230,25 @@ mod windows_impl {
                     }
                 }
                 Alvo::AlternarFrente => {
-                    let na_frente = GetForegroundWindow() == janela;
-                    if na_frente && IsIconic(janela) == 0 {
-                        ShowWindow(janela, SW_MINIMIZE);
+                    // Basta **alguma** janela do programa estar na frente. Um
+                    // programa costuma ter várias, e exigir que a da frente
+                    // fosse justo a primeira da lista fazia o pad nunca
+                    // minimizar: caía sempre no "traz para a frente" de quem
+                    // já estava na frente.
+                    let em_foco = GetForegroundWindow();
+                    let alguma_na_frente = todas
+                        .iter()
+                        .any(|j| *j == em_foco && IsIconic(*j) == 0);
+                    if alguma_na_frente {
+                        for j in todas {
+                            ShowWindow(*j, SW_MINIMIZE);
+                        }
                     } else {
-                        ShowWindow(janela, SW_RESTORE);
-                        SetForegroundWindow(janela);
+                        trazer_para_frente(janela);
                     }
                 }
                 Alvo::TrazerParaFrente => {
-                    ShowWindow(janela, SW_RESTORE);
-                    SetForegroundWindow(janela);
+                    trazer_para_frente(janela);
                 }
                 Alvo::Maximizar => {
                     if IsZoomed(janela) != 0 {
@@ -260,12 +327,16 @@ mod windows_impl {
                 return 1;
             }
             if let Some((exe, caminho)) = processo_do_pid(pid) {
-                if exe == busca.alvo {
+                if busca.alvos.iter().any(|a| *a == exe) {
                     busca.achadas.push(janela);
-                } else if let Some(pasta) = &busca.pasta {
-                    if caminho.starts_with(pasta.as_str()) {
-                        busca.por_pasta.push(janela);
-                    }
+                } else if busca
+                    .pasta
+                    .as_ref()
+                    .is_some_and(|p| caminho.starts_with(p.as_str()))
+                {
+                    busca.por_pasta.push(janela);
+                } else if busca.alvos.iter().any(|a| casa(&exe, a)) {
+                    busca.parecidas.push(janela);
                 }
             }
             1
