@@ -338,6 +338,44 @@ som real** e pulam sozinhos numa maquina sem saida de audio.
 Falta: plugins nos samples (VST3/CLAP), que o proprio Davi deixou para bem
 depois.
 
+### Atalho que nao saia, e a lista de programas (2026-09-06)
+
+O Davi configurou a lupa com o atalho `win` para abrir o Raycast e nada
+acontecia. Medido no Windows, com o processo em foco antes e depois:
+
+| Atalho | Abre? |
+|---|---|
+| `win+r` | sim |
+| `win+s` | sim, abre o SearchHost |
+| `win` sozinha | **nao** |
+| `ctrl+esc` | **nao** |
+
+Duas causas somadas:
+
+1. **`SendInput` sem scancode.** Programa que escuta o teclado por hook de
+   baixo nivel descarta tecla que chega sem scancode. Agora toda tecla vai com
+   `MapVirtualKeyW`, e as estendidas (setas, Win, Ctrl direito) com
+   `KEYEVENTF_EXTENDEDKEY`. O retorno do `SendInput` tambem era ignorado: zero
+   quer dizer que o Windows bloqueou, o que acontece quando a janela em foco
+   roda elevada. Agora avisa, e solta os modificadores ja apertados em vez de
+   deixar um preso.
+2. **O Raycast e o Iniciar dele.** Ele intercepta a tecla Windows por hook, e
+   hook ignora evento injetado de proposito, para nao entrar em laco. Nenhum
+   atalho vai acordar o Raycast. O caminho certo e **abrir o programa**.
+
+O padrao da lupa era `Atalho{"win"}`, que nunca abriu nada. Virou `win+s`, que
+e o que a lupa promete e funciona medido.
+
+**`apps.rs`**: a lista do menu Iniciar, pelo `Get-StartApps` do PowerShell. Todo
+item, inclusive programa comum, vira `shell:appsFolder\<identificador>`: o
+`Get-StartApps` devolve identificador de app, nao caminho, e o Chrome vem como
+"Chrome", que nao abriria de outro jeito. App da Microsoft Store so abre assim,
+porque o executavel dele mora em `WindowsApps`, protegida. Provado no aparelho:
+abrir o Raycast por esse caminho traz ele para a frente.
+
+Na interface, o "abrir programa" ganhou **Escolher** (lista do menu Iniciar, com
+busca sem acento e teclado) ao lado do **Arquivo** de antes.
+
 ### Revisao do audio (2026-09-06)
 
 O uso mudou de figura: **streamer disparando sample na live e musico fazendo

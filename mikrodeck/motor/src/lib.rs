@@ -6,6 +6,7 @@
 //! Ver `docs/arquitetura.md` e `docs/spike-hid.md`.
 
 pub mod acoes;
+pub mod apps;
 pub mod audio;
 pub mod config;
 pub mod estado;

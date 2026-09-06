@@ -304,6 +304,26 @@ export async function pararPrevia(): Promise<void> {
   await invoke("parar_previa");
 }
 
+/** Um programa que o menu Iniciar conhece. */
+export interface AppInstalado {
+  nome: string;
+  caminho: string;
+  da_loja: boolean;
+}
+
+/** A lista de programas instalados, para escolher pelo nome. */
+export async function listarApps(): Promise<AppInstalado[]> {
+  if (!DENTRO_DO_TAURI) {
+    return [
+      { nome: "Google Chrome", caminho: "shell:appsFolder\Chrome", da_loja: false },
+      { nome: "Spotify", caminho: "shell:appsFolder\Spotify!App", da_loja: true },
+      { nome: "Bloco de Notas", caminho: "shell:appsFolder\notepad.exe", da_loja: false },
+    ];
+  }
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<AppInstalado[]>("listar_apps");
+}
+
 type Remover = () => void;
 
 /** Assina um evento do motor. No navegador, não faz nada. */

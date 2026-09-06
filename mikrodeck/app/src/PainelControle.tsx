@@ -9,6 +9,7 @@
 import { useEffect, useState } from "react";
 import { escolherPrograma as escolher } from "./ponte";
 import PainelSample from "./PainelSample";
+import SeletorApp from "./SeletorApp";
 import { CORES, NOMES_CORES, rotuloDaCor, type NomeCor } from "./cores";
 import type { Selecao } from "./Aparelho";
 import {
@@ -60,6 +61,7 @@ export function PainelControle({
   const atual = controle ?? CONTROLE_VAZIO;
   // Gravação de atalho: enquanto grava, o teclado inteiro vira entrada.
   const [gravando, setGravando] = useState(false);
+  const [escolhendoApp, setEscolhendoApp] = useState(false);
   /** Teclas seguradas agora, na ordem em que foram apertadas. */
   const [seguradas, setSeguradas] = useState<string[]>([]);
 
@@ -213,10 +215,25 @@ export function PainelControle({
               }
               className={`${entrada} flex-1 text-xs`}
             />
-            <button onClick={escolherPrograma} className={botao} title="Procurar">
-              Procurar
+            <button
+              onClick={() => setEscolhendoApp(true)}
+              className={botao}
+              title="Escolher da lista do menu Iniciar"
+            >
+              Escolher
+            </button>
+            <button
+              onClick={escolherPrograma}
+              className={botao}
+              title="Procurar o arquivo no disco"
+            >
+              Arquivo
             </button>
           </div>
+          <p className="mt-1 text-xs text-neutral-500">
+            "Escolher" lista o que está no menu Iniciar, inclusive apps da
+            Microsoft Store, que não abrem pelo arquivo.
+          </p>
           <label className="mt-2 flex items-start gap-2 text-xs text-neutral-600 dark:text-neutral-400">
             <input
               type="checkbox"
@@ -444,6 +461,21 @@ export function PainelControle({
             </Campo>
           )}
         </>
+      )}
+
+      {escolhendoApp && (
+        <SeletorApp
+          onFechar={() => setEscolhendoApp(false)}
+          onEscolher={(app) => {
+            setEscolhendoApp(false);
+            mudar({
+              acao: { tipo: "abrir_programa", caminho: app.caminho, argumentos: [] },
+              // Nome vazio ainda: batiza com o nome do programa, que é o que a
+              // pessoa ia digitar de qualquer jeito.
+              ...(atual.nome.trim() === "" ? { nome: app.nome } : {}),
+            });
+          }}
+        />
       )}
 
       {atual.acao.tipo === "sample" && (

@@ -165,6 +165,16 @@ fn executar(acao: &Acao, casa: &HomeAssistant) -> std::io::Result<()> {
             caminho,
             argumentos,
         } => {
+            // App do menu Iniciar não tem executável para chamar: quem abre é
+            // o Explorer, pelo identificador do app. É assim que app da
+            // Microsoft Store abre, já que o .exe dele mora numa pasta
+            // protegida que nem sempre aceita ser chamada direto.
+            if crate::apps::e_da_loja(caminho) {
+                return Command::new("explorer.exe")
+                    .arg(caminho.trim())
+                    .spawn()
+                    .map(|_| ());
+            }
             // Atalho do Windows não é executável: o CreateProcess recusa com
             // "não é um aplicativo Win32 válido". Quem sabe abrir atalho é o shell.
             if precisa_do_shell(caminho) {
@@ -398,7 +408,14 @@ pub mod teclado {
             return;
         }
         for &c in &codigos {
-            enviar(c, false);
+            if !enviar(c, false) {
+                // Solta o que já foi apertado: deixar um modificador preso
+                // trava o teclado inteiro da pessoa.
+                for &solta in codigos.iter().rev() {
+                    enviar(solta, true);
+                }
+                return;
+            }
         }
         for &c in codigos.iter().rev() {
             enviar(c, true);
@@ -407,8 +424,9 @@ pub mod teclado {
 
     /// Aperta e solta uma tecla virtual só.
     pub fn mandar_tecla_virtual(codigo: u16) {
-        enviar(codigo, false);
-        enviar(codigo, true);
+        if enviar(codigo, false) {
+            enviar(codigo, true);
+        }
     }
 
     /// Gira a roda do mouse, como o scroll. `passos` positivo rola para cima.
@@ -438,22 +456,62 @@ pub mod teclado {
         }
     }
 
-    fn enviar(codigo: u16, soltar: bool) {
+    /// Teclas que o Windows chama de estendidas. Sem a marca, o `Ctrl` direito
+    /// vira esquerdo e as setas viram as do teclado numérico.
+    fn e_estendida(codigo: u16) -> bool {
+        matches!(
+            codigo,
+            0x21..=0x28 // PageUp, PageDown, End, Home, setas
+                | 0x2D | 0x2E // Insert, Delete
+                | 0x5B | 0x5C // Win esquerda e direita
+                | 0x5D // Menu de contexto
+                | 0x90 // NumLock
+                | 0xA3 // Ctrl direito
+                | 0xA5 // Alt direito
+        )
+    }
+
+    /// Aperta ou solta uma tecla. Devolve `false` quando o Windows recusou.
+    ///
+    /// Dois detalhes que parecem enfeite e não são:
+    ///
+    /// - **O scancode.** Programas que escutam o teclado por hook de baixo
+    ///   nível, como lançadores e sobreposições de jogo, descartam tecla que
+    ///   chega sem scancode. Era por isso que a tecla Windows não abria nada.
+    /// - **O retorno.** `SendInput` devolve zero quando o Windows bloqueia a
+    ///   injeção, o que acontece quando a janela em foco roda com privilégio
+    ///   maior que o nosso. Ignorar isso é ficar sem saber por que nada
+    ///   aconteceu.
+    fn enviar(codigo: u16, soltar: bool) -> bool {
+        use windows_sys::Win32::UI::Input::KeyboardAndMouse::{
+            MapVirtualKeyW, KEYEVENTF_EXTENDEDKEY, MAPVK_VK_TO_VSC,
+        };
+        let scan = unsafe { MapVirtualKeyW(codigo as u32, MAPVK_VK_TO_VSC) } as u16;
+        let mut flags = if soltar { KEYEVENTF_KEYUP } else { 0 };
+        if e_estendida(codigo) {
+            flags |= KEYEVENTF_EXTENDEDKEY;
+        }
         let mut entrada = INPUT {
             r#type: INPUT_KEYBOARD,
             Anonymous: INPUT_0 {
                 ki: KEYBDINPUT {
                     wVk: codigo as VIRTUAL_KEY,
-                    wScan: 0,
-                    dwFlags: if soltar { KEYEVENTF_KEYUP } else { 0 },
+                    wScan: scan,
+                    dwFlags: flags,
                     time: 0,
                     dwExtraInfo: 0,
                 },
             },
         };
-        unsafe {
-            SendInput(1, &mut entrada, std::mem::size_of::<INPUT>() as i32);
+        let enviados =
+            unsafe { SendInput(1, &mut entrada, std::mem::size_of::<INPUT>() as i32) };
+        if enviados == 0 {
+            eprintln!(
+                "o Windows recusou a tecla {codigo:#04x}. A janela em foco costuma                  rodar como administrador; rode o MikroDeck como administrador também."
+            );
+            return false;
         }
+        true
     }
 }
 

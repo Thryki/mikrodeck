@@ -370,8 +370,13 @@ fn padrao_do_botao(nome: &str) -> Acao {
         // A estrela vai para a primeira página, que faz o papel de favoritos.
         BOTAO_FAVORITOS => Acao::IrParaPagina { numero: 1 },
         // A lupa abre a busca do Windows.
+        //
+        // É `win+s`, e não `win` sozinha: a tecla Windows sozinha, quando vem
+        // de um programa em vez do teclado, não abre nada. Medido nesta
+        // máquina, junto com `ctrl+esc`, que também não abre. `win+s` abre o
+        // SearchHost, que é o que a lupa promete.
         BOTAO_BUSCA => Acao::Atalho {
-            teclas: "win".into(),
+            teclas: "win+s".into(),
         },
         _ => Acao::Nenhuma,
     }
@@ -810,7 +815,7 @@ mod testes {
     fn busca_abre_a_tecla_windows_por_padrao() {
         let mut e = Estado::novo(config_de_teste());
         let r = e.processar(&Evento::Botao { nome: "busca", apertado: true });
-        assert_eq!(r, Reacao::Executar(Acao::Atalho { teclas: "win".into() }));
+        assert_eq!(r, Reacao::Executar(Acao::Atalho { teclas: "win+s".into() }));
     }
 
     #[test]

@@ -234,6 +234,15 @@ struct CasaDescoberta {
     config: Config,
 }
 
+/// Os programas que o menu Iniciar conhece, para escolher pelo nome.
+///
+/// Caçar o executável no disco não funciona para app da Microsoft Store: ele
+/// mora numa pasta protegida e nem sempre abre quando chamado direto.
+#[tauri::command]
+fn listar_apps() -> Result<Vec<motor::apps::App>, String> {
+    motor::apps::listar()
+}
+
 /// Microfones disponíveis, para o seletor da gravação.
 #[tauri::command]
 fn microfones() -> Vec<motor::som::gravador::Microfone> {
@@ -538,7 +547,8 @@ pub fn run() {
             testar_sample,
             descobrir_casa,
             forma_de_onda,
-            parar_previa
+            parar_previa,
+            listar_apps
         ])
         .setup(|app| {
             let caminho = Config::caminho_padrao();
