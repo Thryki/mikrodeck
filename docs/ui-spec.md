@@ -1,4 +1,4 @@
-# Pedidos do Davi na primeira rodada de uso real (2026-09-02)
+# Pedidos do Thryki na primeira rodada de uso real (2026-09-02)
 
 Lista completa, em ordem de prioridade decidida junto. Nada aqui foi inventado.
 
@@ -29,7 +29,7 @@ Lista completa, em ordem de prioridade decidida junto. Nada aqui foi inventado.
 10. **Aperta, aperta de novo, segura**: abrir o app, minimizar, e fechar segurando.
 11. **Sons**: abertura, volume subindo e descendo, mudo.
 
-## Páginas de exemplo para o Davi (pedido em 2026-09-02)
+## Páginas de exemplo para o Thryki (pedido em 2026-09-02)
 
 Para depois que a ferramenta estiver redonda. Ele pediu explicitamente:
 
@@ -121,7 +121,7 @@ só resolve nomes curtos por uma chave de registro que a chamada direta não con
 no motor com fallback pelo `start`). Mas mesmo corrigido, o usuário não deve digitar nome de
 executável. O campo precisa de: botão de procurar arquivo, lista dos programas instalados, e
 validação na hora ("esse programa não existe neste computador"). O caso da calculadora, que o
-Davi não tem instalada, mostra que validar na hora importa.
+Thryki não tem instalada, mostra que validar na hora importa.
 
 **Botão de encerrar não pode ser um botão só.** A primeira versão encerrava no SHIFT, que é
 modificador e todo mundo aperta sem querer, e depois não havia como reabrir pelo aparelho.
@@ -165,7 +165,7 @@ liga e desliga. O texto é livre, o usuário escreve o que quiser.
 
 ## Home Assistant (pedido em 2026-09-02)
 
-O Davi quer uma pagina dedicada as automacoes da casa. O Home Assistant expoe
+O Thryki quer uma pagina dedicada as automacoes da casa. O Home Assistant expoe
 tudo por HTTP, entao o motor ganhou duas acoes:
 
 - `home_assistant`: chama um servico, no formato `dominio.servico` mais a
@@ -343,7 +343,7 @@ pagina. Trocar a escolha libera o antigo na hora.
 
 ## Futuro: samples de audio nos pads (pedido em 2026-09-04, NAO e para agora)
 
-O Davi quer, mais adiante, o pad tocar audio. Anotado com as palavras dele,
+O Thryki quer, mais adiante, o pad tocar audio. Anotado com as palavras dele,
 para entrar do jeito certo quando chegar a hora.
 
 ### Tocar um sample
@@ -377,4 +377,4 @@ para entrar do jeito certo quando chegar a hora.
 - Latencia: o disparo precisa vir do caminho pad -> hid -> estado, sem passar
   pela interface, como toda acao.
 - Plugins: VST3 ou CLAP exige hospedar o plugin no processo; e um projeto por
-  si so. Fica para depois de tudo o mais, como o proprio Davi disse.
+  si so. Fica para depois de tudo o mais, como o proprio Thryki disse.

@@ -360,41 +360,55 @@ Mais em [docs/arquitetura.md](docs/arquitetura.md).
 
 ---
 
+## Apoie o projeto
+
+O MikroDeck é livre e sempre vai ser. Ele nasceu de engenharia reversa feita à
+mão num aparelho cujo protocolo a fabricante nunca publicou, e todo o que foi
+descoberto está aqui, aberto, em
+[docs/maschine-mikro-mk3-hid-protocol.md](docs/maschine-mikro-mk3-hid-protocol.md).
+
+Se ele te serviu, você pode ajudar a manter o trabalho de pé pelo botão
+**Sponsor** aqui no repositório, ou pelo botão **Apoiar o projeto** dentro do
+app, em Configurações.
+
+Ajuda que não custa nada também vale: abrir uma issue com um bug, contar em qual
+Windows funcionou, ou mandar uma página pronta que você montou.
+
 ## Estado do projeto
 
 | Item | Situação |
 |---|---|
-| Versão | 0.1.0 em todos os pacotes |
+| Versão | **1.0.0**, a primeira estável |
 | Plataforma | Só Windows (SendInput, Core Audio, EnumWindows, HID do Windows) |
-| Testes | 125 no motor, 15 no MCP, todos passando |
-| Download | Versão compilada e instalador entram na **1.1**, a primeira estável. Até lá, roda do código |
-| Repositório | Privado enquanto a base amadurece, versionando a cada etapa |
-| Licença | Ainda não definida. Entra antes de o repositório abrir |
+| Testes | 209 no motor, 15 no MCP, todos passando |
+| Download | Instalador e MSI na [página de releases](https://github.com/Thryki/mikrodeck/releases) |
+| Licença | GPL-3.0 |
 
-**Em andamento**
+**O que entrou na 1.0**
 
-- Animações de LED no descanso (Respiração, Contorno, Colunas, Pulso) e eco de luz ao soltar o pad. Existem no motor, com testes de orçamento de escritas passando. Ainda não foram provadas no aparelho com a câmera. Desenho em [docs/animacoes.md](docs/animacoes.md).
-
-**Próximos passos, em ordem**
-
-1. Garantir que o aparelho sai do modo MIDI quando o MikroDeck abre.
-2. Sons ao apertar.
-3. Animações provadas no aparelho.
-4. Repositório público com a engenharia reversa.
-5. Versão 1.1 com instalador.
+- Pads, páginas, botões físicos, knob, touch strip e a tela, tudo configurável.
+- Samples de áudio nos pads: carregar arquivo ou gravar pelo microfone, com
+  envelope de plugin (atraso, ataque, retenção, decaimento, sustentação,
+  liberação e as duas curvas) e forma de onda desenhada.
+- Home Assistant: descobre os dispositivos da casa e monta a página sozinho.
+- Luz dos pads no descanso, com cinco modos.
+- Escolher programa pelo nome, do menu Iniciar, apps da Microsoft Store inclusive.
+- Cuidar da janela pelo pad: um toque alterna, segurar maximiza, dois toques fecham.
+- Servidor MCP, para configurar por conversa em qualquer assistente que fale MCP.
 
 <details>
 <summary>O que ainda não existe</summary>
 
 - macOS e Linux.
 - Perfis (conjuntos de páginas por contexto) e importar/exportar em JSON. Hoje é uma config única com páginas.
-- Sons ao apertar, subir e descer volume ou mudo.
+- Sons de sistema ao apertar, subir e descer volume ou mudo. O que existe é o sample no pad.
 - Animação de boot ao conectar.
 - Vigia de janela em foco e de volume. Só existe a vigia de processos, e a cor de "aberto" vale para a ação de abrir programa.
 - Limiar de pressão configurável. A pressão é lida, mas o toque leve usa o evento de encostar do próprio aparelho.
 - Token do Home Assistant em cofre seguro. Fica em texto puro no `config.json`, e a interface avisa.
 - O desenho na interface acompanhar a animação de LED ao vivo.
-- Instalador publicado. Só na 1.1.
+- Plugins (VST3 ou CLAP) nos samples.
+- Sobrepor vozes no mesmo pad e grupos de corte.
 
 </details>
 
@@ -508,4 +522,8 @@ Maschine e Native Instruments são marcas dos seus donos. Este projeto não tem 
 
 Feito por **Thryki**. Motor, app, servidor MCP e engenharia reversa do protocolo.
 
-Licença ainda não definida.
+Licenciado sob a **GPL-3.0**. Você pode usar, estudar, modificar e
+redistribuir; quem distribuir uma versão modificada precisa abrir o código dela
+também. Veja [LICENSE](LICENSE).
+
+Copyright © 2026 Davi Reis Aragão (Thryki).

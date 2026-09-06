@@ -1,7 +1,6 @@
 //! Gravar um sample pelo microfone.
 //!
-//! O limite curto é de propósito, como o Davi pediu: trinta a quarenta
-//! segundos, um minuto no máximo. Isso mantém o arquivo pequeno, a memória
+//! O limite curto é de propósito: quarenta segundos, um minuto no máximo. Isso mantém o arquivo pequeno, a memória
 //! baixa e o sample utilizável como sample, não como podcast.
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
@@ -292,7 +291,7 @@ pub fn faixa_com_som(
 
 /// Reescreve o WAV sem o silêncio das pontas.
 ///
-/// É o que o Davi pediu: gravou, o silêncio morre sozinho. Se o arquivo for só
+/// Gravou, o silêncio morre sozinho. Se o arquivo for só
 /// silêncio, ele fica como está: apagar o que a pessoa acabou de gravar seria
 /// pior do que deixar um arquivo mudo que ela pode ouvir e refazer.
 pub fn aparar_silencio(caminho: &Path) -> Result<Duration, String> {
@@ -485,7 +484,7 @@ mod testes {
 
     #[test]
     fn o_limite_de_gravacao_e_curto_de_proposito() {
-        // O Davi pediu trinta a quarenta segundos, um minuto no maximo.
+        // Quarenta segundos bastam para um sample; um minuto e o teto.
         assert_eq!(SEGUNDOS_MAXIMOS, 60);
     }
 }

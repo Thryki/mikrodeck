@@ -503,7 +503,7 @@ mod testes {
 
     #[test]
     fn o_corte_suave_desce_ate_zero_em_vez_de_estalar() {
-        // Era o clique do Davi: apertar o pad de novo matava a voz anterior no
+        // Era a origem do clique: apertar o pad de novo matava a voz anterior no
         // meio da onda.
         let corte = Arc::new(AtomicBool::new(false));
         let mut com = ComEnvelope::com_corte(

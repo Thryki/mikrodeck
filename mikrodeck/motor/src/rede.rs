@@ -59,7 +59,7 @@ impl HomeAssistant {
 
 /// Domínios do Home Assistant que ligam e desligam com `toggle`.
 ///
-/// A lista é curta de propósito: o Davi pediu "todos os dispositivos que liga e
+/// A lista é curta de propósito: entra "todo dispositivo que liga e
 /// desliga". Sensor e câmera não entram porque não há o que alternar neles.
 pub const DOMINIOS_QUE_ALTERNAM: [&str; 8] = [
     "light",

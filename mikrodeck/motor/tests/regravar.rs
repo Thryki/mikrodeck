@@ -1,4 +1,4 @@
-//! Prova o bug que o Davi achou: gravar um sample novo por cima do antigo
+//! Prova um bug que apareceu no uso: gravar um sample novo por cima do antigo
 //! deixava o pad tocando o som velho, porque o cache era só pelo caminho.
 
 use motor::som::{Saida, Tocador, ModoDisparo};

@@ -32,7 +32,7 @@ pub struct Estado {
     /// Pads apertados agora, pelo número impresso.
     apertados: HashSet<u8>,
     /// Pausado, o aparelho apaga e nenhum controle executa ação. Serve para o
-    /// Davi voltar a usar o Mikro como Maschine sem fechar o MikroDeck.
+    /// voltar a usar o Mikro como Maschine sem fechar o MikroDeck.
     pausado: bool,
     /// Quanto da touch strip acender, de 0 a 1. `None` deixa apagada.
     nivel_strip: Option<f32>,

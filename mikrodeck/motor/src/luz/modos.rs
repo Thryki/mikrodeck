@@ -19,7 +19,7 @@ pub const RODA: [Cor; 8] = [
     Cor::Magenta,
 ];
 
-/// O caminho do cometa, exatamente como o Davi pediu: sobe a coluna da
+/// O caminho do cometa: sobe a coluna da
 /// esquerda, atravessa a fileira de cima, desce a da direita, volta pela de
 /// baixo e fecha pelo centro.
 pub const CONTORNO: [u8; 16] = [1, 5, 9, 13, 14, 15, 16, 12, 8, 4, 3, 2, 6, 10, 11, 7];

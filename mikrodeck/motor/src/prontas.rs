@@ -252,7 +252,8 @@ fn windows() -> Pagina {
 /// Monta as páginas da casa a partir do que o Home Assistant respondeu.
 ///
 /// Cada pad alterna uma entidade. Passando de dezesseis, sobra página: a casa do
-/// Davi tem mais dispositivo do que pad, e cortar a lista em silêncio seria pior
+/// Uma casa costuma ter mais dispositivo do que pad, e cortar a lista em
+/// silêncio seria pior
 /// do que continuar na página seguinte.
 pub fn paginas_da_casa(entidades: &[crate::rede::Entidade]) -> Vec<Pagina> {
     if entidades.is_empty() {

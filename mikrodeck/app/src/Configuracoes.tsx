@@ -17,7 +17,7 @@ import {
   testarLeds as testar,
   type Diagnostico,
 } from "./ponte";
-import { descobrirCasa, escutar } from "./ponte";
+import { abrirNoNavegador, descobrirCasa, escutar } from "./ponte";
 import { CORES, NOMES_CORES, rotuloDaCor } from "./cores";
 import {
   BOTOES_FISICOS,
@@ -555,6 +555,36 @@ export function Configuracoes({ config, onFechar, onSalvar }: Props) {
             {recadoCasa && (
               <p className="mt-2 text-xs text-neutral-500">{recadoCasa}</p>
             )}
+          </div>
+        </Secao>
+
+        <Secao titulo="Apoie o projeto">
+          <p className="mb-3 text-[13px] leading-relaxed text-neutral-600 dark:text-neutral-400">
+            O MikroDeck é livre e sempre vai ser. Ele nasceu de engenharia
+            reversa feita à mão num aparelho que a fabricante nunca abriu, e
+            quem quiser ajudar a manter o trabalho de pé pode contribuir.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() =>
+                abrirNoNavegador("https://github.com/sponsors/Thryki").catch(
+                  console.error,
+                )
+              }
+              className="rounded-lg bg-pink-600 px-3 py-1.5 text-[13px] font-medium text-white hover:bg-pink-500"
+            >
+              ♥ Apoiar o projeto
+            </button>
+            <button
+              onClick={() =>
+                abrirNoNavegador("https://github.com/Thryki/mikrodeck").catch(
+                  console.error,
+                )
+              }
+              className={botao}
+            >
+              Ver no GitHub
+            </button>
           </div>
         </Secao>
 

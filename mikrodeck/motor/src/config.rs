@@ -675,7 +675,7 @@ mod testes_calibracao {
 
     #[test]
     fn calibrado_o_maximo_alcancavel_vira_cem_por_cento() {
-        // O dedo do Davi só chega a 240; isso tem que valer 100%.
+        // Numa strip calibrada em 240, o dedo chegando ali tem que valer 100%.
         let c = CalibracaoStrip {
             minimo: 10,
             maximo: 240,

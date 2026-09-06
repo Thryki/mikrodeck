@@ -2,8 +2,8 @@
  * O painel do som no pad: escolher o arquivo, gravar do microfone, decidir se
  * toca até o fim ou enquanto está apertado, e ajustar o envelope.
  *
- * O limite de gravação é curto de propósito, como o Davi pediu: trinta a
- * quarenta segundos, um minuto no máximo. Isso é sample, não podcast.
+ * O limite de gravação é curto de propósito: quarenta segundos, um minuto no
+ * máximo. Isso é sample, não podcast.
  */
 
 import { useEffect, useRef, useState } from "react";

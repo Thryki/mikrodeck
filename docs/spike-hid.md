@@ -39,7 +39,7 @@ O que resistiu a todos os testes: o estado persistente gravado pelo Maschine 2 e
 
 ## Persistência: confirmada (2026-09-02)
 
-Testado pelo Davi depois da descoberta:
+Testado pelo Thryki depois da descoberta:
 
 - Reiniciou o Windows: continua funcionando.
 - Desconectou e reconectou o cabo várias vezes seguidas: funciona sempre.
@@ -69,7 +69,7 @@ report `0x80` com 81 bytes. O Windows enche até 265 bytes sozinho e funciona. L
 # DECISÃO (2026-09-02, 02h): o Maschine 2 é pré-requisito. Seguimos para o motor.
 
 Depois de capturar a inicialização real com USBPcap e reproduzi-la byte a byte, ficou provado
-que **os bytes não bastam** para acordar o aparelho. A decisão do Davi foi aceitar o Maschine 2
+que **os bytes não bastam** para acordar o aparelho. A decisão do Thryki foi aceitar o Maschine 2
 como pré-requisito e parar a caça ao comando.
 
 ## Regra de uso do MikroDeck (vai para o manual)

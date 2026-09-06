@@ -1,6 +1,6 @@
 [package]
 name = "mikrodeck"
-version = "0.1.0"
+version = "1.0.0"
 description = "MikroDeck — o Maschine Mikro MK3 como Stream Deck"
 authors = ["Thryki"]
 edition = "2021"

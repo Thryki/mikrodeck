@@ -80,7 +80,7 @@ proposta.
 
 ### Contorno
 
-Caminho exato do pedido do Davi, em `CONTORNO: [u8; 16]`:
+Caminho exato do pedido do Thryki, em `CONTORNO: [u8; 16]`:
 
 ```
 1, 5, 9, 13, 14, 15, 16, 12, 8, 4, 3, 2, 6, 10, 11, 7
@@ -230,7 +230,7 @@ desliga o descanso inteiro. Com a luz, descanso deixa de ser só a tela: `ativo`
 é o interruptor, e texto vazio só deixa a tela na página. O teste
 `texto_vazio_nao_liga_o_descanso` vira `texto_vazio_deixa_a_tela_na_pagina`.
 Quem já tem texto configurado não sente nada. Um juiz marcou isso como decisão
-de produto escondida; está aqui à vista, e é do Davi a palavra final.
+de produto escondida; está aqui à vista, e é do Thryki a palavra final.
 
 Enums em Rust, em `config.rs`, todos `#[serde(rename_all = "snake_case")]`
 como `FuncaoStrip`:
@@ -427,7 +427,7 @@ aparelho não tem.
 | VU verde, amarelo e vermelho | mesma | Árvore de natal. Um matiz. |
 | Forma de onda deslizando e espectro por coluna | "seis modos dentro do orçamento" | Onda de verdade pede captura loopback WASAPI com FFT a 30 quadros ou mais. Não cabe nas escritas que sobram e uma grade 4x4 não tem resolução. Se um dia entrar, é "espectro", outro modo, outro spike. |
 | Strip como medidor de pico com 25 LEDs | mesma | Contradiz "só os 16 pads se movem". A strip segue mostrando o que ela controla. |
-| Esmaecer e Apagar como modos próprios | mesma | A Respiração já deixa a página visível e fraca a maior parte do ciclo, e `nenhuma` já cobre "não mexer". Se o Davi quiser a página parada e fraca, é uma constante na Respiração. |
+| Esmaecer e Apagar como modos próprios | mesma | A Respiração já deixa a página visível e fraca a maior parte do ciclo, e `nenhuma` já cobre "não mexer". Se o Thryki quiser a página parada e fraca, é uma constante na Respiração. |
 | Roda com os 16 matizes | vencedora | Os 16 do aparelho são desiguais (dois laranjas, dois amarelos, cinco entre ameixa e fúcsia). Roda de 8 espaçados. Trocar é uma constante. |
 | Campo de brilho na luz | vencedora | O teto é o brilho geral. Menos um controle. |
 | Ritmo "tela" no Contorno (cometa sincronizado com o texto) | vencedora | Bonito, não é v1. |
@@ -452,6 +452,6 @@ testar, baixar `descanso.segundos` para 5 na config.
 | 11 | Opcional: `Aviso::Pads(Quadro)` a até 8 por segundo para o desenho na interface mostrar a mesma animação, só com a janela visível. | O desenho na tela acompanha a mesa. |
 | 12 | De graça com o mesmo motor, depois: animação de boot do ui-spec, uma volta de Contorno em branco ao conectar, e a página acende. | Ligar o cabo. |
 
-Decisões que ficam com o Davi, já com a recomendação aplicada no texto: texto
+Decisões que ficam com o Thryki, já com a recomendação aplicada no texto: texto
 vazio deixa a tela na página (seção 5); apertar no descanso executa sempre
 (seção 4); ritmo rápido em 150 ms (seção 2).

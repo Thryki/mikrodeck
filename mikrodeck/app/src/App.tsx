@@ -308,48 +308,6 @@ export default function App() {
   return (
     <div className="flex h-full flex-col bg-neutral-100 text-neutral-900 dark:bg-neutral-900 dark:text-neutral-100">
       <div className="flex min-h-0 flex-1 flex-col bg-white dark:bg-neutral-800">
-        {/* Barra de status */}
-        <div className="flex flex-wrap items-center gap-3 border-b border-neutral-200 px-4 py-2.5 dark:border-neutral-700">
-          <span className="flex items-center gap-2 text-[13px] text-neutral-600 dark:text-neutral-400">
-            <span
-              className={`inline-block h-2 w-2 rounded-full ${
-                situacao === "conectado" ? "bg-green-600" : "bg-neutral-400"
-              }`}
-            />
-            {situacao === "conectado"
-              ? "Mikro MK3 conectado"
-              : "Procurando o aparelho…"}
-          </span>
-          {pausado && (
-            <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-[12px] text-amber-900 dark:bg-amber-900/40 dark:text-amber-200">
-              Desligado. Aperte o botão redondo do aparelho para voltar.
-            </span>
-          )}
-          <span className="flex-1" />
-          {salvando && (
-            <span className="text-[13px] text-neutral-500">salvando…</span>
-          )}
-          <label className="flex items-center gap-2 text-[13px] text-neutral-600 dark:text-neutral-400">
-            Brilho geral
-            <input
-              type="range"
-              min={0}
-              max={3}
-              value={config.brilho}
-              onChange={(e) =>
-                salvar({ ...config, brilho: Number(e.target.value) })
-              }
-              className="w-24"
-            />
-          </label>
-          <button
-            onClick={() => setMostrarConfig(true)}
-            className="rounded-lg border border-neutral-300 px-2.5 py-1 text-[13px] text-neutral-600 hover:bg-neutral-50 dark:border-neutral-600 dark:text-neutral-400 dark:hover:bg-neutral-700"
-          >
-            Configurações
-          </button>
-        </div>
-
         {/* Abas de páginas */}
         <div className="flex flex-wrap items-center gap-2 border-b border-neutral-200 px-4 py-2.5 dark:border-neutral-700">
           <span className="mr-1 text-[13px] text-neutral-600 dark:text-neutral-400">
@@ -372,18 +330,16 @@ export default function App() {
               {i + 1} · {p.nome}
             </button>
           ))}
-          <button
-            onClick={novaPagina}
-            className="rounded-lg border border-neutral-300 px-3 py-1 text-[13px] text-neutral-600 hover:bg-neutral-50 dark:border-neutral-600 dark:text-neutral-400 dark:hover:bg-neutral-700"
-          >
-            + Nova página
-          </button>
           <div className="relative">
             <button
               onClick={() => setMostrarProntas((v) => !v)}
-              className="rounded-lg border border-neutral-300 px-3 py-1 text-[13px] text-neutral-600 hover:bg-neutral-50 dark:border-neutral-600 dark:text-neutral-400 dark:hover:bg-neutral-700"
+              title="Nova página"
+              aria-label="Nova página"
+              className="flex h-7 w-7 items-center justify-center rounded-lg border border-neutral-300 text-neutral-600 hover:bg-neutral-50 dark:border-neutral-600 dark:text-neutral-400 dark:hover:bg-neutral-700"
             >
-              + Página pronta
+              <svg viewBox="0 0 16 16" className="h-3.5 w-3.5" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round">
+                <path d="M8 3.5v9M3.5 8h9" />
+              </svg>
             </button>
             {mostrarProntas && (
               <>
@@ -392,6 +348,18 @@ export default function App() {
                   onClick={() => setMostrarProntas(false)}
                 />
                 <div className="absolute left-0 top-full z-20 mt-1 w-72 overflow-hidden rounded-lg border border-neutral-300 bg-white shadow-lg dark:border-neutral-600 dark:bg-neutral-800">
+                  <button
+                    onClick={() => {
+                      setMostrarProntas(false);
+                      novaPagina();
+                    }}
+                    className="block w-full border-b border-neutral-200 px-3 py-2 text-left hover:bg-neutral-50 dark:border-neutral-700 dark:hover:bg-neutral-700"
+                  >
+                    <span className="block text-[13px] font-medium">Vazia</span>
+                    <span className="block text-xs text-neutral-500">
+                      Uma página em branco, para você montar do jeito que quiser.
+                    </span>
+                  </button>
                   {prontas.map((p) => (
                     <button
                       key={p.id}
@@ -417,9 +385,42 @@ export default function App() {
               </>
             )}
           </div>
-          <span className="text-xs text-neutral-500">
+          <span className="hidden text-xs text-neutral-500 xl:inline">
             botão direito na aba para renomear ou apagar
           </span>
+
+          <span className="flex-1" />
+
+          {salvando && <span className="text-xs text-neutral-500">salvando…</span>}
+          {pausado && (
+            <span className="rounded-full bg-amber-100 px-2.5 py-0.5 text-[12px] text-amber-900 dark:bg-amber-900/40 dark:text-amber-200">
+              Desligado
+            </span>
+          )}
+          <label className="flex items-center gap-2 text-[13px] text-neutral-600 dark:text-neutral-400">
+            Brilho
+            <input
+              type="range"
+              min={0}
+              max={3}
+              value={config.brilho}
+              onChange={(e) =>
+                salvar({ ...config, brilho: Number(e.target.value) })
+              }
+              className="w-20"
+            />
+          </label>
+          <button
+            onClick={() => setMostrarConfig(true)}
+            title="Configurações"
+            aria-label="Configurações"
+            className="flex h-7 w-7 items-center justify-center rounded-lg border border-neutral-300 text-neutral-600 hover:bg-neutral-50 dark:border-neutral-600 dark:text-neutral-400 dark:hover:bg-neutral-700"
+          >
+            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={1.6}>
+              <circle cx="12" cy="12" r="3" />
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9v0a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+            </svg>
+          </button>
         </div>
 
         <div className="grid min-h-0 flex-1 grid-cols-1 lg:grid-cols-[1fr_360px]">
@@ -441,10 +442,27 @@ export default function App() {
                 tela={telaDoAparelho()}
               />
             </div>
-            <p className="shrink-0 text-center text-xs text-neutral-500">
-              Clique em qualquer pad ou botão para configurar. O que você aperta no
-              aparelho acende aqui também.
-            </p>
+            <div className="flex shrink-0 flex-col items-center gap-1">
+              <span
+                className="flex items-center gap-2 text-xs text-neutral-500"
+                title={
+                  situacao === "conectado"
+                    ? "Mikro MK3 conectado"
+                    : "Procurando o aparelho"
+                }
+              >
+                <span
+                  className={`inline-block h-2 w-2 rounded-full ${
+                    situacao === "conectado" ? "bg-green-500" : "bg-red-500"
+                  }`}
+                />
+                {situacao === "conectado" ? "Conectado" : "Procurando…"}
+              </span>
+              <p className="text-center text-xs text-neutral-500">
+                Clique em qualquer pad ou botão para configurar. O que você aperta
+                no aparelho acende aqui também.
+              </p>
+            </div>
           </div>
 
           <div className="min-h-0 overflow-auto p-5">
@@ -455,8 +473,10 @@ export default function App() {
                 </p>
                 <p>
                   {Object.keys(paginaAtual?.pads ?? {}).length} de 16 pads
-                  programados,{" "}
-                  {Object.keys(paginaAtual?.botoes ?? {}).length} botões.
+                  programados
+                  {Object.keys(paginaAtual?.botoes ?? {}).length === 1
+                    ? ", 1 botão."
+                    : `, ${Object.keys(paginaAtual?.botoes ?? {}).length} botões.`}
                 </p>
                 <p className="text-xs leading-relaxed">
                   Clique num pad ou botão do desenho ao lado para escolher o que

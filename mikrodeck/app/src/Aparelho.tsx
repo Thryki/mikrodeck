@@ -11,6 +11,18 @@
 import { useRef, useState } from "react";
 import { CORES, type NomeCor } from "./cores";
 
+/**
+ * O eixo vertical que a tela e o knob dividem.
+ *
+ * Ele nasce do espaço entre a coluna de botões da esquerda, que acaba em 57, e a
+ * coluna do VOLUME, que começa em 197: o meio desse vão é 127. Tela e knob
+ * centrados nele deixam o canto superior esquerdo alinhado.
+ */
+const KNOB_X = 127;
+
+/** Largura da tela do aparelho. */
+const TELA_L = 84;
+
 /** A letra impressa no canto de cada pad, como no aparelho: A a P de 13 a 4. */
 const LETRAS_PADS: Record<number, string> = {
   13: "A", 14: "B", 15: "C", 16: "D",
@@ -290,9 +302,17 @@ export function Aparelho({
         role={onClicarTela ? "button" : undefined}
         aria-label="Tela do aparelho"
       >
-        <rect x="83" y="34" width="84" height="27" rx="2" fill="#0b0b0b" stroke="#1a1a19" />
+        <rect
+          x={KNOB_X - TELA_L / 2}
+          y="34"
+          width={TELA_L}
+          height="27"
+          rx="2"
+          fill="#0b0b0b"
+          stroke="#1a1a19"
+        />
         <text
-          x="125"
+          x={KNOB_X}
           y={tela.sub ? 47 : 51}
           textAnchor="middle"
           fontSize="11"
@@ -303,7 +323,7 @@ export function Aparelho({
         </text>
         {tela.sub && (
           <text
-            x="125"
+            x={KNOB_X}
             y="57"
             textAnchor="middle"
             fontSize="10"
@@ -317,23 +337,27 @@ export function Aparelho({
 
       {/* Knob. Na foto é um cilindro escuro de metal, com a borda canelada e um
           topo liso mais claro. O clique dele é programável, então é clicável aqui
-          também; não tem LED, por isso só ganha contorno quando selecionado. */}
+          também; não tem LED, por isso só ganha contorno quando selecionado.
+
+          Ele fica centrado com a tela, no eixo `KNOB_X`. Medindo a foto, no
+          aparelho real ele cai uns dez pontos à esquerda desse eixo; centrado fica
+          melhor de ver, e a diferença não se nota. */}
       <g
         className="cursor-pointer"
         data-alvo="botao:knob"
         onPointerDown={(e) => aoDescer(e, { tipo: "botao", id: "knob" })}
       >
-        <circle cx="114" cy="112" r="31" fill="#141413" />
-        <circle cx="114" cy="109" r="30" fill="#2a2a28" />
+        <circle cx={KNOB_X} cy="112" r="31" fill="#141413" />
+        <circle cx={KNOB_X} cy="109" r="30" fill="#2a2a28" />
         {/* Canelado da borda: um tracinho a cada 12 graus. */}
         {Array.from({ length: 30 }, (_, i) => {
           const a = (i * Math.PI * 2) / 30;
           return (
             <line
               key={i}
-              x1={114 + Math.cos(a) * 23}
+              x1={KNOB_X + Math.cos(a) * 23}
               y1={109 + Math.sin(a) * 23}
-              x2={114 + Math.cos(a) * 29.5}
+              x2={KNOB_X + Math.cos(a) * 29.5}
               y2={109 + Math.sin(a) * 29.5}
               stroke="#4a4a47"
               strokeWidth="1.1"
@@ -341,7 +365,7 @@ export function Aparelho({
           );
         })}
         <circle
-          cx="114"
+          cx={KNOB_X}
           cy="109"
           r="22"
           fill="#3a3a37"
@@ -354,7 +378,7 @@ export function Aparelho({
           }
           strokeWidth="2.5"
         />
-        <circle cx="114" cy="107" r="18" fill="#4d4d49" />
+        <circle cx={KNOB_X} cy="107" r="18" fill="#4d4d49" />
       </g>
 
       {/* Logo, medido contra a foto: o anel alinha com a coluna de botões da

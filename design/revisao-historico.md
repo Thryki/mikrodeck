@@ -10,7 +10,7 @@ Itens já corrigidos da v1 para a v2:
 5. Botões chapados. Face mais clara que a borda.
 6. Botões de modo com texto à esquerda. Centralizados.
 
-Pendências que dependem do Davi:
+Pendências que dependem do Thryki:
 - Sub-rótulos ilegíveis na foto: PATTERN, EVENTS, SELECT, SOLO. Não inventar.
 - Foto em resolução maior para a próxima rodada.
 

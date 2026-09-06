@@ -58,7 +58,7 @@ Também resolvido, sem ser da lista: **cursor do mouse fora da captura** (item 1
 | 9 | Corpo de texto do NOTE REPEAT | Menor que GROUP, AUTO e LOCK | Mesmo corpo dos vizinhos | Baixa | Manter o corpo padrão e apertar o entreletras. Carregado. |
 | 10 | Sub-rótulo do REC | "Count In" | "Count-In", com hífen | Baixa | Acrescentar o hífen. Carregado. Custo zero. |
 | 11 | SHIFT | Texto solto igual aos vizinhos | Rótulo dentro de uma caixinha clara serigrafada | Baixa | Opcional. É o único rótulo com caixa na foto. |
-| 12 | Sub-rótulo do SELECT | Sem sub-rótulo | Há uma marca abaixo de SELECT, **ilegível na foto** | Baixa | Não inventar. Perguntar ao Davi. Carregado das rodadas 1, 2 e 3. |
+| 12 | Sub-rótulo do SELECT | Sem sub-rótulo | Há uma marca abaixo de SELECT, **ilegível na foto** | Baixa | Não inventar. Perguntar ao Thryki. Carregado das rodadas 1, 2 e 3. |
 
 ### Fechado nesta rodada, não mexer mais (diferença abaixo de 1 pp)
 

@@ -1,6 +1,6 @@
 //! Volume do sistema, via Core Audio do Windows.
 //!
-//! Serve para duas coisas que o Davi pediu: a touch strip funcionar como controle
+//! Serve para duas coisas: a touch strip funcionar como controle
 //! de volume de verdade, e a tela do aparelho mostrar a barra com o valor real.
 //! Sem ler o volume do sistema, a barra mentiria assim que alguém mexesse por fora.
 

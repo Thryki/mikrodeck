@@ -347,6 +347,16 @@ export async function entidadesDaCasa(): Promise<EntidadeCasa[]> {
   return invoke<EntidadeCasa[]>("entidades_da_casa");
 }
 
+/** Abre um endereco no navegador padrao. */
+export async function abrirNoNavegador(url: string): Promise<void> {
+  if (!DENTRO_DO_TAURI) {
+    window.open(url, "_blank");
+    return;
+  }
+  const { openUrl } = await import("@tauri-apps/plugin-opener");
+  await openUrl(url);
+}
+
 type Remover = () => void;
 
 /** Assina um evento do motor. No navegador, não faz nada. */

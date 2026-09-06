@@ -2249,7 +2249,7 @@ dependencies = [
 
 [[package]]
 name = "mikrodeck"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "motor",
  "serde",
@@ -2300,7 +2300,7 @@ dependencies = [
 
 [[package]]
 name = "motor"
-version = "0.1.0"
+version = "1.0.0"
 dependencies = [
  "cpal",
  "dirs 6.0.0",

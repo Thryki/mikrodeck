@@ -4,7 +4,7 @@ App desktop que transforma o Maschine Mikro MK3 (Native Instruments) em um Strea
 
 Dono do projeto: Thryki (art director). Este arquivo é a memória do projeto. Leia inteiro antes de qualquer tarefa.
 
-## Como trabalhar com o Davi
+## Como trabalhar com o Thryki
 
 - Responder em português, informal mas respeitoso.
 - Um passo por vez. Fazer, mostrar, pausar, esperar o ok. Nunca despejar tudo de uma vez.
@@ -34,7 +34,7 @@ Coluna esquerda            Coluna central   Direita
 
 Pad 13 é o canto superior esquerdo. Pad 1 é o canto inferior esquerdo. Letras A a P acompanham 13..16, 9..12, 5..8, 1..4.
 
-Foto de referência: `design/referencia/mikro-mk3-foto.png` (640 px, baixa resolução; pedir versão maior ao Davi).
+Foto de referência: `design/referencia/mikro-mk3-foto.png` (640 px, baixa resolução; pedir versão maior ao Thryki).
 
 ## Achado técnico que define tudo
 
@@ -116,18 +116,18 @@ Telas:
 
 Mockups já feitos:
 - `design/mockup-config.html`: tela principal v1 (aprovada como direção).
-- `design/mikro-mk3-v2.svg`: render do aparelho v2 (passou por 1 rodada de revisão; falta aprovação final do Davi).
+- `design/mikro-mk3-v2.svg`: render do aparelho v2 (passou por 1 rodada de revisão; falta aprovação final do Thryki).
 
 ## Loop de qualidade do render do aparelho
 
-O Davi quer que o desenho do aparelho seja fiel à foto. Fluxo:
+O Thryki quer que o desenho do aparelho seja fiel à foto. Fluxo:
 1. Subagente `construtor` edita `design/mikro-mk3.svg`.
 2. `scripts/render-svg.sh` converte para PNG.
 3. Subagente `revisor` compara PNG com a foto e escreve `design/revisao.md`.
 4. Sessão principal repete até o revisor devolver "sem diferenças relevantes".
-5. Davi aprova.
+5. Thryki aprova.
 
-Pendências conhecidas do render: sub-rótulos ilegíveis na foto (PATTERN, EVENTS, SELECT, SOLO). Não inventar; pedir ao Davi.
+Pendências conhecidas do render: sub-rótulos ilegíveis na foto (PATTERN, EVENTS, SELECT, SOLO). Não inventar; pedir ao Thryki.
 
 ## Motor: hid + state + actions prontos (2026-09-02)
 
@@ -186,7 +186,7 @@ espaça as duas metades da tela em 12 ms.
 Os dois caem no mesmo conserto: abrir pelo `start` do shell. Extensões que sempre vão pelo
 shell estão em `SO_PELO_SHELL`. Tem teste de regressão.
 
-### Estado da lista de pedidos do Davi
+### Estado da lista de pedidos do Thryki
 
 Feito: janela responsiva, tela do aparelho com página e nome do controle, brilho geral
 rotulado, brilho por pad, ícones desenhados, contraste do seletor no modo escuro, menu de
@@ -249,7 +249,7 @@ Documentação do protocolo em inglês, para o repositório público:
 
 ## Estado em 2026-09-04
 
-Rodada grande de pedidos do Davi, tudo em `docs/ui-spec.md` na secao
+Rodada grande de pedidos do Thryki, tudo em `docs/ui-spec.md` na secao
 "Rodada de 2026-09-04". Resumo do que entrou:
 
 - Desenho do aparelho passou por 4 rodadas de avaliador contra a foto em alta:
@@ -273,7 +273,7 @@ certo e sempre `npm run tauri build`. E antes de buildar, derrubar
 ## Rodada de 2026-09-05: luz dos pads e README
 
 - `docs/animacoes.md`: desenho fechado por painel (3 propostas, 2 juizes).
-  Cinco modos mais "nenhuma": Respiracao (padrao), Contorno (a lista do Davi),
+  Cinco modos mais "nenhuma": Respiracao (padrao), Contorno (a lista do Thryki),
   Colunas, Pulso e Som. Som ainda cai na Respiracao; falta o medidor.
 - Modulo `motor/src/luz/`: `Animador` puro, recebe `Instant` e devolve `Quadro`.
   Orcamento de escritas provado por teste com relogio falso, teto de 8 quadros
@@ -298,11 +298,11 @@ certo e sempre `npm run tauri build`. E antes de buildar, derrubar
 
 ### Verificado no aparelho (2026-09-05, tarde)
 
-Confirmado por foto: modo Contorno anda na ordem que o Davi pediu, com rastro de
+Confirmado por foto: modo Contorno anda na ordem que o Thryki pediu, com rastro de
 quatro pads e troca de cor a cada volta. `scripts/olho.sh` girava a imagem duas
 vezes (`hflip,vflip,rotate=PI` volta ao original); corrigido para `hflip,vflip`.
 
-Queixa do Davi sobre a respiracao: os pads subindo e descendo de brilho anulam o
+Queixa do Thryki sobre a respiracao: os pads subindo e descendo de brilho anulam o
 slider de brilho e nao agradam. A opcao de ligar, desligar e trocar de modo ja
 existia em Configuracoes > Luz dos pads. O que estragava era o **descanso em 5
 segundos**, deixado de teste. Voltou para 90 s, e o modo padrao dele agora e
@@ -335,8 +335,31 @@ Decisoes que valem manter:
 Testes: 156 no total. Cinco deles (`tests/som_de_verdade.rs`) usam a **placa de
 som real** e pulam sozinhos numa maquina sem saida de audio.
 
-Falta: plugins nos samples (VST3/CLAP), que o proprio Davi deixou para bem
+Falta: plugins nos samples (VST3/CLAP), que o proprio Thryki deixou para bem
 depois.
+
+### Versao 1.0.0 e abertura do repositorio (2026-09-06)
+
+Interface enxugada a pedido do dono:
+
+- **Uma barra so em cima**: paginas, um botao `+` unico (a lista de modelos
+  agora comeca com "Vazia"), e a direita brilho e a engrenagem em icone.
+- **O status desceu** para baixo do desenho do aparelho, discreto, com ponto
+  verde ligado e vermelho desligado.
+- **Janela abre em 1200x740**, era 1180x820.
+- **Knob e tela no mesmo eixo** (`KNOB_X = 127`, o meio do vao entre a coluna
+  de botoes da esquerda e a coluna do VOLUME). Medido na foto, no aparelho real
+  o knob cai uns dez pontos a esquerda desse eixo; centrado fica melhor de ver.
+
+Fechamento da 1.0:
+
+- Versao 1.0.0 em todos os pacotes.
+- **Licenca GPL-3.0**, copyright de Davi Reis Aragao (Thryki).
+- Botao "Apoiar o projeto" em Configuracoes e `.github/FUNDING.yml`.
+- Dados pessoais fora do repositorio: `.codex/` saiu do versionamento, e os
+  comentarios que citavam o dono pelo nome viraram linguagem impessoal.
+- Historico do git reescrito para `Thryki <davireis@proton.me>`, com o ramo
+  `backup-antes-de-reescrever` guardado antes.
 
 ### Seletor de entidades do Home Assistant (2026-09-06)
 
@@ -367,7 +390,7 @@ O motivo esta no proprio gesto: o duplo toque so e reconhecido no segundo
 toque, e o primeiro ja executou o toque curto, que minimiza. O segundo chegava
 numa janela minimizada.
 
-Trocado a pedido do Davi, e a troca conserta isso de vez:
+Trocado a pedido do Thryki, e a troca conserta isso de vez:
 
 | Gesto | Antes | Agora |
 |---|---|---|
@@ -416,7 +439,7 @@ pagina de codigo do console, e agora o comando forca UTF-8.
 
 ### Atalho que nao saia, e a lista de programas (2026-09-06)
 
-O Davi configurou a lupa com o atalho `win` para abrir o Raycast e nada
+O Thryki configurou a lupa com o atalho `win` para abrir o Raycast e nada
 acontecia. Medido no Windows, com o processo em foco antes e depois:
 
 | Atalho | Abre? |
@@ -516,7 +539,7 @@ regua e **quadratica**: numa regua linear ate 8 s cada passo valeria 80 ms e os
 tempos curtos, que sao os que mais importam num envelope, ficariam
 inalcancaveis. Assim 25 da 500 ms e 50 da 2 s.
 
-### A casa do Davi entrou (2026-09-05)
+### A casa do Thryki entrou (2026-09-05)
 
 Home Assistant ligado e provado contra o servidor de verdade. **Nem o token nem
 o endereco entram no repositorio**: eles vivem so em `~/.mikrodeck/config.json`,
@@ -541,7 +564,7 @@ Achados que so apareceram contra o servidor real:
 
 ### Envelope como o de um plugin, e o silencio que morre sozinho
 
-Pedido do Davi com um print do envelope do FL Studio.
+Pedido do Thryki com um print do envelope do FL Studio.
 
 O `Envelope` ganhou os estagios que faltavam: **atraso**, **retencao** e duas
 **tensoes** (curva da subida e curva da descida). A tensao e expoente
@@ -567,7 +590,7 @@ silencio fica como esta: apagar o que a pessoa acabou de gravar seria pior.
 
 ### Fluidez da luz (2026-09-05, tarde)
 
-O Davi achou a animacao travada. Eram duas causas somadas:
+O Thryki achou a animacao travada. Eram duas causas somadas:
 
 1. `PASSO_MINIMO` de 125 ms: teto de 8 quadros por segundo. Agora 50 ms, 20 por
    segundo. O aparelho aceita cerca de 31 escritas por segundo e a tela no
