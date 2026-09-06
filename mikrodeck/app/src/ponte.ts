@@ -324,6 +324,29 @@ export async function listarApps(): Promise<AppInstalado[]> {
   return invoke<AppInstalado[]>("listar_apps");
 }
 
+/** Uma entidade do Home Assistant, com o servico ja sugerido. */
+export interface EntidadeCasa {
+  id: string;
+  nome: string;
+  dominio: string;
+  ligada: boolean;
+  estado_conhecido: boolean;
+  servico: string;
+}
+
+/** As entidades que dá para acionar por um pad. */
+export async function entidadesDaCasa(): Promise<EntidadeCasa[]> {
+  if (!DENTRO_DO_TAURI) {
+    return [
+      { id: "light.sala", nome: "Luz da sala", dominio: "light", ligada: true, estado_conhecido: true, servico: "light.toggle" },
+      { id: "switch.cafeteira", nome: "Cafeteira", dominio: "switch", ligada: false, estado_conhecido: true, servico: "switch.toggle" },
+      { id: "scene.cinema", nome: "Cinema", dominio: "scene", ligada: false, estado_conhecido: false, servico: "scene.turn_on" },
+    ];
+  }
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<EntidadeCasa[]>("entidades_da_casa");
+}
+
 type Remover = () => void;
 
 /** Assina um evento do motor. No navegador, não faz nada. */

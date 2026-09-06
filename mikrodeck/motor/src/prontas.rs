@@ -533,6 +533,7 @@ mod testes {
             id: id.to_string(),
             nome: nome.to_string(),
             ligada: false,
+            estado_conhecido: true,
         }
     }
 

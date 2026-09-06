@@ -10,6 +10,7 @@ import { useEffect, useState } from "react";
 import { escolherPrograma as escolher } from "./ponte";
 import PainelSample from "./PainelSample";
 import SeletorApp from "./SeletorApp";
+import SeletorEntidade from "./SeletorEntidade";
 import { CORES, NOMES_CORES, rotuloDaCor, type NomeCor } from "./cores";
 import type { Selecao } from "./Aparelho";
 import {
@@ -62,6 +63,7 @@ export function PainelControle({
   // Gravação de atalho: enquanto grava, o teclado inteiro vira entrada.
   const [gravando, setGravando] = useState(false);
   const [escolhendoApp, setEscolhendoApp] = useState(false);
+  const [escolhendoEntidade, setEscolhendoEntidade] = useState(false);
   /** Teclas seguradas agora, na ordem em que foram apertadas. */
   const [seguradas, setSeguradas] = useState<string[]>([]);
 
@@ -398,18 +400,28 @@ export function PainelControle({
             </p>
           </Campo>
           <Campo rotulo="Entidade">
-            <input
-              type="text"
-              value={atual.acao.entidade}
-              placeholder="Ex.: light.sala"
-              onChange={(e) =>
-                mudar({ acao: { ...atual.acao, entidade: e.target.value } as Acao })
-              }
-              className={entrada}
-            />
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={atual.acao.entidade}
+                placeholder="Ex.: light.sala"
+                onChange={(e) =>
+                  mudar({ acao: { ...atual.acao, entidade: e.target.value } as Acao })
+                }
+                className={`${entrada} flex-1`}
+              />
+              <button
+                onClick={() => setEscolhendoEntidade(true)}
+                className={botao}
+                title="Escolher da lista do Home Assistant"
+              >
+                Escolher
+              </button>
+            </div>
             <p className="mt-1 text-xs text-neutral-500">
-              Deixe vazio para serviços que não precisam de entidade. O endereço
-              e o token ficam em Configurações.
+              "Escolher" lista o que a sua casa tem e já preenche o serviço certo
+              para cada tipo. Deixe vazio para serviços que não precisam de
+              entidade. O endereço e o token ficam em Configurações.
             </p>
           </Campo>
         </>
@@ -462,6 +474,19 @@ export function PainelControle({
             </Campo>
           )}
         </>
+      )}
+
+      {escolhendoEntidade && (
+        <SeletorEntidade
+          onFechar={() => setEscolhendoEntidade(false)}
+          onEscolher={(e) => {
+            setEscolhendoEntidade(false);
+            mudar({
+              acao: { tipo: "home_assistant", servico: e.servico, entidade: e.id },
+              ...(atual.nome.trim() === "" ? { nome: e.nome } : {}),
+            });
+          }}
+        />
       )}
 
       {escolhendoApp && (

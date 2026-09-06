@@ -338,6 +338,28 @@ som real** e pulam sozinhos numa maquina sem saida de audio.
 Falta: plugins nos samples (VST3/CLAP), que o proprio Davi deixou para bem
 depois.
 
+### Seletor de entidades do Home Assistant (2026-09-06)
+
+Mesma ideia da lista de programas: digitar `light.sala` na mao era onde se
+errava sem saber por que. Agora o campo Entidade tem **Escolher**, e a escolha
+**ja preenche o servico certo** para o tipo: cena e script disparam com
+`turn_on`, botao com `press`, media player com `media_play_pause`, o resto
+alterna. Cena e script nunca responderiam a um `toggle`.
+
+`SeletorLista.tsx` e o componente comum dos dois seletores: busca sem acento,
+setas com rolagem acompanhando, quem comeca com o termo aparece antes.
+
+**Lista branca, nao lista negra.** A primeira versao tirava so o que informa
+(sensor, clima). Contra a casa de verdade sobraram 47 entidades, das quais 24
+nao faziam nada: 14 atualizacoes de add-on, conversacao, texto para fala,
+notificacao. Entidade legitima, pad quebrado. Com `DOMINIOS_ACIONAVEIS` sobraram
+19, todas com servico que funciona.
+
+Detalhe que apareceu no caminho: `unknown` e `unavailable` nao sao a mesma
+coisa. Fora do ar nao vira pad, mas cena, script e botao vivem em `unknown` por
+natureza, porque nao ha estado para saber. Quem filtrava os dois juntos deixava
+cena e script de fora.
+
 ### Gestos de janela trocados (2026-09-06)
 
 Com a janela maximizada, dois toques para desmaximizar acabavam **minimizando**.

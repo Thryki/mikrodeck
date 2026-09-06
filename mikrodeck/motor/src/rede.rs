@@ -72,6 +72,28 @@ pub const DOMINIOS_QUE_ALTERNAM: [&str; 8] = [
     "media_player",
 ];
 
+/// Domínios que um pad sabe acionar, e para os quais existe serviço claro.
+pub const DOMINIOS_ACIONAVEIS: [&str; 18] = [
+    "light",
+    "switch",
+    "fan",
+    "input_boolean",
+    "humidifier",
+    "siren",
+    "automation",
+    "media_player",
+    "scene",
+    "script",
+    "button",
+    "input_button",
+    "lock",
+    "cover",
+    "vacuum",
+    "climate",
+    "remote",
+    "valve",
+];
+
 /// Uma entidade do Home Assistant, no que interessa para virar pad.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Entidade {
@@ -83,6 +105,9 @@ pub struct Entidade {
     pub dominio: String,
     /// Se está ligada agora.
     pub ligada: bool,
+    /// Se o Home Assistant sabe o estado dela. Cena, script e botão não têm
+    /// estado, e isso não é defeito.
+    pub estado_conhecido: bool,
 }
 
 impl Entidade {
@@ -90,6 +115,46 @@ impl Entidade {
     pub fn servico_de_alternar(&self) -> String {
         format!("{}.toggle", self.dominio)
     }
+
+    /// O serviço que faz sentido para esta entidade, já pronto para o pad.
+    ///
+    /// Nem tudo alterna. Cena e script não têm estado para inverter: eles
+    /// disparam. Botão se aperta. Deixar `toggle` para esses seria dar um pad
+    /// que não funciona e não diz por quê.
+    pub fn servico_sugerido(&self) -> String {
+        let acao = match self.dominio.as_str() {
+            // Não têm estado para inverter: disparam.
+            "scene" | "script" => "turn_on",
+            "button" | "input_button" => "press",
+            "media_player" => "media_play_pause",
+            "vacuum" => "start",
+            _ => "toggle",
+        };
+        format!("{}.{acao}", self.dominio)
+    }
+
+    /// Se dá para fazer alguma coisa com esta entidade pelo pad.
+    ///
+    /// É lista de quem entra, não de quem sai. Tirar só o que informa deixava
+    /// passar coisa demais: `update.toggle`, `conversation.toggle`,
+    /// `tts.toggle`. São entidades de verdade, mas nenhuma delas responde a um
+    /// pad, e oferecer isso é oferecer pad quebrado. Numa casa de teste eram 47
+    /// entidades oferecidas, das quais 24 não faziam nada.
+    pub fn tem_o_que_fazer(&self) -> bool {
+        DOMINIOS_ACIONAVEIS.contains(&self.dominio.as_str())
+    }
+}
+
+/// Lê tudo do Home Assistant e devolve o que dá para acionar por um pad.
+///
+/// Diferente de `listar_entidades`, que só traz o que liga e desliga: aqui
+/// entram cena, script, botão e companhia, porque o seletor da interface deixa
+/// a pessoa escolher qualquer coisa e não só interruptor.
+pub fn listar_acionaveis(ha: &HomeAssistant) -> Result<Vec<Entidade>, String> {
+    let corpo = buscar_estados(ha)?;
+    let mut lista = todas_do_json(&corpo)?;
+    lista.retain(|e| e.tem_o_que_fazer());
+    Ok(lista)
 }
 
 /// Lê a lista de entidades do Home Assistant e devolve só as que alternam.
@@ -97,6 +162,11 @@ impl Entidade {
 /// A resposta do `/api/states` costuma ter centenas de entidades, a maioria
 /// sensor. Filtrar aqui evita despejar isso tudo na interface.
 pub fn listar_entidades(ha: &HomeAssistant) -> Result<Vec<Entidade>, String> {
+    entidades_do_json(&buscar_estados(ha)?)
+}
+
+/// Baixa o `/api/states` cru.
+fn buscar_estados(ha: &HomeAssistant) -> Result<String, String> {
     if !ha.configurado() {
         return Err("falta o endereço ou o token do Home Assistant".into());
     }
@@ -111,16 +181,24 @@ pub fn listar_entidades(ha: &HomeAssistant) -> Result<Vec<Entidade>, String> {
         .header("Authorization", &format!("Bearer {}", ha.token.trim()))
         .call()
         .map_err(|e| format!("nao consegui falar com o Home Assistant: {e}"))?;
-    let corpo = resposta
+    resposta
         .body_mut()
         .read_to_string()
-        .map_err(|e| format!("resposta ilegivel do Home Assistant: {e}"))?;
-    entidades_do_json(&corpo)
+        .map_err(|e| format!("resposta ilegivel do Home Assistant: {e}"))
 }
 
 /// Separa o JSON do `/api/states`. Fica de fora da chamada de rede para o teste
 /// rodar sem servidor nenhum.
 pub fn entidades_do_json(corpo: &str) -> Result<Vec<Entidade>, String> {
+    let mut todas = todas_do_json(corpo)?;
+    // Aqui "unknown" também sai: numa página de liga e desliga, um pad que não
+    // sabe o estado do que controla é um pad morto.
+    todas.retain(|e| DOMINIOS_QUE_ALTERNAM.contains(&e.dominio.as_str()) && e.estado_conhecido);
+    Ok(todas)
+}
+
+/// Separa o JSON do `/api/states` sem filtrar por domínio.
+pub fn todas_do_json(corpo: &str) -> Result<Vec<Entidade>, String> {
     let bruto: serde_json::Value =
         serde_json::from_str(corpo).map_err(|e| format!("JSON invalido: {e}"))?;
     let lista = bruto
@@ -131,12 +209,10 @@ pub fn entidades_do_json(corpo: &str) -> Result<Vec<Entidade>, String> {
         .filter_map(|e| {
             let id = e.get("entity_id")?.as_str()?.to_string();
             let (dominio, _) = id.split_once('.')?;
-            if !DOMINIOS_QUE_ALTERNAM.contains(&dominio) {
-                return None;
-            }
             let estado = e.get("state").and_then(|s| s.as_str()).unwrap_or("");
-            // "unavailable" e "unknown" viram pad morto: melhor nao oferecer.
-            if estado == "unavailable" || estado == "unknown" {
+            // Fora do ar não vira pad. "unknown" fica: cena, script e botão
+            // vivem nesse estado por natureza, porque não há nada para saber.
+            if estado == "unavailable" {
                 return None;
             }
             let nome = e
@@ -148,6 +224,7 @@ pub fn entidades_do_json(corpo: &str) -> Result<Vec<Entidade>, String> {
             Some(Entidade {
                 dominio: dominio.to_string(),
                 ligada: estado == "on" || estado == "playing",
+                estado_conhecido: estado != "unknown" && !estado.is_empty(),
                 id,
                 nome,
             })
@@ -255,6 +332,95 @@ mod testes {
         let e = entidades_do_json(EXEMPLO).unwrap();
         let sala = e.iter().find(|x| x.id == "light.sala").unwrap();
         assert_eq!(sala.servico_de_alternar(), "light.toggle");
+    }
+
+    const VARIADO: &str = r#"[
+        {"entity_id":"light.sala","state":"on","attributes":{"friendly_name":"Luz da sala"}},
+        {"entity_id":"scene.cinema","state":"unknown","attributes":{"friendly_name":"Cinema"}},
+        {"entity_id":"script.boa_noite","state":"off","attributes":{"friendly_name":"Boa noite"}},
+        {"entity_id":"button.reiniciar","state":"unknown","attributes":{"friendly_name":"Reiniciar"}},
+        {"entity_id":"media_player.tv","state":"playing","attributes":{"friendly_name":"TV"}},
+        {"entity_id":"sensor.temperatura","state":"21","attributes":{"friendly_name":"Temperatura"}},
+        {"entity_id":"weather.casa","state":"sunny","attributes":{}}
+    ]"#;
+
+    #[test]
+    fn o_servico_sugerido_muda_com_o_tipo_da_entidade() {
+        // Cena e script nao alternam, eles disparam. Botao se aperta. Dar
+        // `toggle` para esses seria entregar um pad que nao funciona.
+        let e = todas_do_json(VARIADO).unwrap();
+        let acha = |id: &str| e.iter().find(|x| x.id == id).unwrap().servico_sugerido();
+        assert_eq!(acha("light.sala"), "light.toggle");
+        assert_eq!(acha("scene.cinema"), "scene.turn_on");
+        assert_eq!(acha("script.boa_noite"), "script.turn_on");
+        assert_eq!(acha("button.reiniciar"), "button.press");
+        assert_eq!(acha("media_player.tv"), "media_player.media_play_pause");
+    }
+
+    #[test]
+    fn o_que_so_informa_fica_fora_da_lista() {
+        let e = todas_do_json(VARIADO).unwrap();
+        assert!(e.iter().any(|x| x.id == "sensor.temperatura"), "todas traz tudo");
+        let acionaveis: Vec<&str> = e
+            .iter()
+            .filter(|x| x.tem_o_que_fazer())
+            .map(|x| x.id.as_str())
+            .collect();
+        assert!(!acionaveis.contains(&"sensor.temperatura"), "{acionaveis:?}");
+        assert!(!acionaveis.contains(&"weather.casa"), "{acionaveis:?}");
+        assert_eq!(acionaveis.len(), 5);
+    }
+
+    #[test]
+    fn a_lista_que_alterna_continua_menor_que_a_lista_toda() {
+        let todas = todas_do_json(VARIADO).unwrap();
+        let alternam = entidades_do_json(VARIADO).unwrap();
+        assert!(alternam.len() < todas.len());
+        assert!(alternam.iter().all(|e| DOMINIOS_QUE_ALTERNAM.contains(&e.dominio.as_str())));
+    }
+
+    #[test]
+    fn nao_oferece_entidade_que_o_pad_nao_aciona() {
+        // Numa casa de verdade a maioria do que sobrava era atualizacao de
+        // add-on e servico de voz: entidade legitima, pad quebrado.
+        let json = r#"[
+            {"entity_id":"update.addon","state":"off","attributes":{}},
+            {"entity_id":"conversation.ha","state":"unknown","attributes":{}},
+            {"entity_id":"tts.google","state":"unknown","attributes":{}},
+            {"entity_id":"stt.cloud","state":"unknown","attributes":{}},
+            {"entity_id":"notify.iphone","state":"unknown","attributes":{}},
+            {"entity_id":"camera.porta","state":"idle","attributes":{}},
+            {"entity_id":"light.sala","state":"on","attributes":{}}
+        ]"#;
+        let acionaveis: Vec<&str> = todas_do_json(json)
+            .unwrap()
+            .iter()
+            .filter(|e| e.tem_o_que_fazer())
+            .map(|e| e.dominio.clone())
+            .collect::<Vec<String>>()
+            .leak()
+            .iter()
+            .map(|s| s.as_str())
+            .collect();
+        assert_eq!(acionaveis, vec!["light"], "{acionaveis:?}");
+    }
+
+    #[test]
+    fn todo_dominio_acionavel_tem_um_servico_que_existe() {
+        // Guarda de regressao: dominio na lista sem servico proprio cairia em
+        // `toggle`, e nem todo dominio tem toggle.
+        for dominio in DOMINIOS_ACIONAVEIS {
+            let e = Entidade {
+                id: format!("{dominio}.x"),
+                nome: "x".into(),
+                dominio: dominio.to_string(),
+                ligada: false,
+                estado_conhecido: true,
+            };
+            let s = e.servico_sugerido();
+            assert!(s.starts_with(dominio), "{s}");
+            assert!(s.split_once('.').is_some_and(|(_, a)| !a.is_empty()));
+        }
     }
 
     #[test]

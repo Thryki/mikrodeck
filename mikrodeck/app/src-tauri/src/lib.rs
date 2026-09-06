@@ -243,6 +243,39 @@ fn listar_apps() -> Result<Vec<motor::apps::App>, String> {
     motor::apps::listar()
 }
 
+/// As entidades do Home Assistant que dá para acionar por um pad.
+///
+/// Traz mais coisa que a descoberta da página da casa: ali só entra o que liga
+/// e desliga, aqui entram cena, script e botão, porque quem escolhe é a pessoa.
+#[tauri::command]
+fn entidades_da_casa() -> Result<Vec<EntidadeUi>, String> {
+    let config = Config::carregar_ou_criar(&Config::caminho_padrao()).map_err(|e| e.to_string())?;
+    let entidades = motor::rede::listar_acionaveis(&config.home_assistant)?;
+    Ok(entidades
+        .into_iter()
+        .map(|e| EntidadeUi {
+            servico: e.servico_sugerido(),
+            id: e.id,
+            nome: e.nome,
+            dominio: e.dominio,
+            ligada: e.ligada,
+            estado_conhecido: e.estado_conhecido,
+        })
+        .collect())
+}
+
+/// Uma entidade no formato que a interface usa, com o serviço já sugerido.
+#[derive(Serialize)]
+struct EntidadeUi {
+    id: String,
+    nome: String,
+    dominio: String,
+    ligada: bool,
+    estado_conhecido: bool,
+    /// O serviço que faz sentido para ela, já pronto para o pad.
+    servico: String,
+}
+
 /// Microfones disponíveis, para o seletor da gravação.
 #[tauri::command]
 fn microfones() -> Vec<motor::som::gravador::Microfone> {
@@ -548,7 +581,8 @@ pub fn run() {
             descobrir_casa,
             forma_de_onda,
             parar_previa,
-            listar_apps
+            listar_apps,
+            entidades_da_casa
         ])
         .setup(|app| {
             let caminho = Config::caminho_padrao();
