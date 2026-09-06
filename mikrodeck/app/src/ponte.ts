@@ -257,6 +257,22 @@ export async function testarSample(
   return invoke<number>("testar_sample", { caminho, volume });
 }
 
+/** O que o Home Assistant devolveu e quantas paginas viraram. */
+export interface CasaDescoberta {
+  dispositivos: number;
+  paginas: number;
+  config: Config;
+}
+
+/** Pergunta ao Home Assistant o que ele tem e monta as paginas da casa. */
+export async function descobrirCasa(): Promise<CasaDescoberta> {
+  if (!DENTRO_DO_TAURI) {
+    throw new Error("sem motor: abra o app para falar com o Home Assistant");
+  }
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<CasaDescoberta>("descobrir_casa");
+}
+
 type Remover = () => void;
 
 /** Assina um evento do motor. No navegador, não faz nada. */

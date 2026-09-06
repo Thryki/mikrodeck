@@ -247,6 +247,88 @@ fn windows() -> Pagina {
     }
 }
 
+/// Monta as páginas da casa a partir do que o Home Assistant respondeu.
+///
+/// Cada pad alterna uma entidade. Passando de dezesseis, sobra página: a casa do
+/// Davi tem mais dispositivo do que pad, e cortar a lista em silêncio seria pior
+/// do que continuar na página seguinte.
+pub fn paginas_da_casa(entidades: &[crate::rede::Entidade]) -> Vec<Pagina> {
+    if entidades.is_empty() {
+        return Vec::new();
+    }
+    let partes: Vec<_> = entidades.chunks(16).collect();
+    let total = partes.len();
+    partes
+        .iter()
+        .enumerate()
+        .map(|(i, parte)| {
+            let mut pads = BTreeMap::new();
+            for (k, e) in parte.iter().enumerate() {
+                // Preenche de cima para baixo, na ordem que se lê: 13 a 16,
+                // depois 9 a 12, e assim por diante.
+                let pad_numero = ORDEM_DE_LEITURA[k];
+                pads.insert(
+                    pad_numero,
+                    pad(
+                        &encurtar(&e.nome),
+                        Acao::HomeAssistant {
+                            servico: e.servico_de_alternar(),
+                            entidade: e.id.clone(),
+                        },
+                        cor_do_dominio(&e.dominio),
+                    ),
+                );
+            }
+            Pagina {
+                nome: if total > 1 {
+                    format!("Casa {}", i + 1)
+                } else {
+                    "Casa".to_string()
+                },
+                pads,
+                botoes: BTreeMap::new(),
+            }
+        })
+        .collect()
+}
+
+/// Os dezesseis pads na ordem em que se lê o aparelho: de cima para baixo, da
+/// esquerda para a direita.
+pub const ORDEM_DE_LEITURA: [u8; 16] = [
+    13, 14, 15, 16, 9, 10, 11, 12, 5, 6, 7, 8, 1, 2, 3, 4,
+];
+
+/// Uma cor por tipo de dispositivo, para bater o olho e saber o que é o quê.
+fn cor_do_dominio(dominio: &str) -> Cor {
+    match dominio {
+        "light" => Cor::AmareloQuente,
+        "switch" => Cor::Ciano,
+        "fan" => Cor::Turquesa,
+        "input_boolean" => Cor::Violeta,
+        "humidifier" => Cor::Azul,
+        "siren" => Cor::Vermelho,
+        "automation" => Cor::Lima,
+        "media_player" => Cor::Magenta,
+        _ => Cor::Branco,
+    }
+}
+
+/// A tela do aparelho é pequena e o nome do pad aparece nela. Nome comprido
+/// vira nome cortado, e cortar no espaço fica melhor do que cortar no meio da
+/// palavra.
+fn encurtar(nome: &str) -> String {
+    const LIMITE: usize = 18;
+    let nome = nome.trim();
+    if nome.chars().count() <= LIMITE {
+        return nome.to_string();
+    }
+    let curto: String = nome.chars().take(LIMITE).collect();
+    match curto.rsplit_once(' ') {
+        Some((antes, _)) if antes.chars().count() >= 8 => antes.to_string(),
+        _ => curto.trim_end().to_string(),
+    }
+}
+
 fn pad(nome: &str, acao: Acao, cor: Cor) -> Controle {
     Controle {
         nome: nome.into(),
@@ -322,6 +404,69 @@ mod testes {
                 }
             }
         }
+    }
+
+    fn ent(id: &str, nome: &str) -> crate::rede::Entidade {
+        crate::rede::Entidade {
+            dominio: id.split_once('.').unwrap().0.to_string(),
+            id: id.to_string(),
+            nome: nome.to_string(),
+            ligada: false,
+        }
+    }
+
+    #[test]
+    fn a_casa_vira_pagina_com_um_pad_por_dispositivo() {
+        let e = vec![ent("light.sala", "Sala"), ent("switch.cafeteira", "Cafeteira")];
+        let p = paginas_da_casa(&e);
+        assert_eq!(p.len(), 1);
+        assert_eq!(p[0].nome, "Casa");
+        // Preenche na ordem de leitura: o primeiro cai no canto de cima.
+        assert_eq!(p[0].pads[&13].nome, "Sala");
+        assert_eq!(p[0].pads[&14].nome, "Cafeteira");
+        assert_eq!(
+            p[0].pads[&13].acao,
+            Acao::HomeAssistant {
+                servico: "light.toggle".into(),
+                entidade: "light.sala".into()
+            }
+        );
+    }
+
+    #[test]
+    fn mais_de_dezesseis_dispositivos_viram_mais_de_uma_pagina() {
+        let e: Vec<_> = (0..20)
+            .map(|i| ent(&format!("light.l{i}"), &format!("Luz {i}")))
+            .collect();
+        let p = paginas_da_casa(&e);
+        assert_eq!(p.len(), 2, "cortou dispositivo em vez de abrir pagina");
+        assert_eq!(p[0].pads.len(), 16);
+        assert_eq!(p[1].pads.len(), 4);
+        assert_eq!(p[0].nome, "Casa 1");
+        assert_eq!(p[1].nome, "Casa 2");
+    }
+
+    #[test]
+    fn sem_dispositivo_nenhum_nao_cria_pagina_vazia() {
+        assert!(paginas_da_casa(&[]).is_empty());
+    }
+
+    #[test]
+    fn nome_comprido_e_cortado_no_espaco() {
+        assert_eq!(encurtar("Sala"), "Sala");
+        assert_eq!(
+            encurtar("Lampada da mesa do escritorio"),
+            "Lampada da mesa"
+        );
+        // Sem espaco util, corta seco em vez de estourar a tela.
+        assert_eq!(encurtar("Abcdefghijklmnopqrstuvwxyz").chars().count(), 18);
+    }
+
+    #[test]
+    fn a_ordem_de_leitura_cobre_os_dezesseis_pads_uma_vez_so() {
+        let mut vistos: Vec<u8> = ORDEM_DE_LEITURA.to_vec();
+        vistos.sort();
+        assert_eq!(vistos, (1..=16).collect::<Vec<u8>>());
     }
 
     #[test]

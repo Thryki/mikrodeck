@@ -178,6 +178,58 @@ fn previsualizar_descanso(motor: State<'_, MotorVivo>) -> Result<(), String> {
     Ok(())
 }
 
+/// Pergunta ao Home Assistant o que ele tem, e monta as páginas da casa.
+///
+/// Nada é sobrescrito: as páginas entram no fim, e uma "Casa" que já existe
+/// ganha um número no nome em vez de tomar o lugar da antiga.
+#[tauri::command]
+fn descobrir_casa(motor_vivo: State<'_, MotorVivo>) -> Result<CasaDescoberta, String> {
+    let caminho = Config::caminho_padrao();
+    let mut config = Config::carregar_ou_criar(&caminho).map_err(|e| e.to_string())?;
+    let entidades = motor::rede::listar_entidades(&config.home_assistant)?;
+    if entidades.is_empty() {
+        return Err("o Home Assistant respondeu, mas sem nenhum dispositivo que liga e desliga".into());
+    }
+    let novas = motor::prontas::paginas_da_casa(&entidades);
+    let quantas = novas.len();
+    let dispositivos = entidades.len();
+    for mut pagina in novas {
+        pagina.nome = nome_livre(&config, &pagina.nome);
+        config.paginas.push(pagina);
+    }
+    config.salvar(&caminho).map_err(|e| e.to_string())?;
+    let guarda = motor_vivo.0.lock().map_err(|e| e.to_string())?;
+    if let Some(s) = guarda.as_ref() {
+        s.aplicar_config(config.clone());
+    }
+    Ok(CasaDescoberta {
+        dispositivos,
+        paginas: quantas,
+        config,
+    })
+}
+
+/// Um nome de página que ainda não está em uso.
+fn nome_livre(config: &Config, desejado: &str) -> String {
+    let existe = |n: &str| config.paginas.iter().any(|p| p.nome == n);
+    if !existe(desejado) {
+        return desejado.to_string();
+    }
+    (2..)
+        .map(|i| format!("{desejado} {i}"))
+        .find(|n| !existe(n))
+        .unwrap_or_else(|| desejado.to_string())
+}
+
+#[derive(Serialize)]
+struct CasaDescoberta {
+    /// Quantos dispositivos entraram.
+    dispositivos: usize,
+    /// Quantas páginas foram criadas.
+    paginas: usize,
+    config: Config,
+}
+
 /// Microfones disponíveis, para o seletor da gravação.
 #[tauri::command]
 fn microfones() -> Vec<motor::som::gravador::Microfone> {
@@ -438,7 +490,8 @@ pub fn run() {
             gravar_sample,
             parar_gravacao,
             tempo_de_gravacao,
-            testar_sample
+            testar_sample,
+            descobrir_casa
         ])
         .setup(|app| {
             let caminho = Config::caminho_padrao();

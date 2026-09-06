@@ -17,7 +17,7 @@ import {
   testarLeds as testar,
   type Diagnostico,
 } from "./ponte";
-import { escutar } from "./ponte";
+import { descobrirCasa, escutar } from "./ponte";
 import { CORES, NOMES_CORES, rotuloDaCor } from "./cores";
 import {
   BOTOES_FISICOS,
@@ -55,6 +55,8 @@ export function Configuracoes({ config, onFechar, onSalvar }: Props) {
   // Calibração da strip: posição crua ao vivo e a faixa vista enquanto calibra.
   const [posicaoStrip, setPosicaoStrip] = useState<number | null>(null);
   const [calibrando, setCalibrando] = useState(false);
+  const [buscando, setBuscando] = useState(false);
+  const [recadoCasa, setRecadoCasa] = useState<string | null>(null);
   const [faixa, setFaixa] = useState<{ minimo: number; maximo: number } | null>(null);
 
   useEffect(() => {
@@ -518,6 +520,42 @@ export function Configuracoes({ config, onFechar, onSalvar }: Props) {
             "Tokens de acesso de longa duração". Ele fica gravado em texto puro
             no arquivo de configuração, na sua pasta de usuário.
           </p>
+
+          <div className="mt-3 rounded-lg border border-neutral-200 p-3 dark:border-neutral-700">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[13px] font-medium">Buscar os dispositivos</p>
+                <p className="text-xs text-neutral-500">
+                  Pergunta ao Home Assistant o que ele tem e monta uma página com
+                  tudo que liga e desliga. Nada do que já existe é apagado.
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setBuscando(true);
+                  setRecadoCasa(null);
+                  descobrirCasa()
+                    .then((r) => {
+                      onSalvar(r.config);
+                      setRecadoCasa(
+                        `${r.dispositivos} dispositivos em ${r.paginas} ${
+                          r.paginas === 1 ? "página" : "páginas"
+                        }.`,
+                      );
+                    })
+                    .catch((e) => setRecadoCasa(String(e)))
+                    .finally(() => setBuscando(false));
+                }}
+                disabled={buscando || !config.home_assistant.token.trim()}
+                className={`${botao} shrink-0 disabled:opacity-40`}
+              >
+                {buscando ? "Buscando…" : "Buscar"}
+              </button>
+            </div>
+            {recadoCasa && (
+              <p className="mt-2 text-xs text-neutral-500">{recadoCasa}</p>
+            )}
+          </div>
         </Secao>
 
         <Secao titulo="Botões com função de fábrica">
