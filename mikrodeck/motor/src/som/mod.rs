@@ -73,9 +73,28 @@ impl Voz {
 ///
 /// Abrir a placa de som pode falhar (máquina sem saída, driver fora do ar). Isso
 /// não pode derrubar o MikroDeck: sem saída, tocar um sample só não faz nada.
+/// Como saber se o arquivo em disco ainda é o mesmo que está em memória.
+/// Guardar só o caminho não basta: gravar um sample novo por cima do antigo
+/// mantém o caminho e troca o conteúdo, e o pad continuava tocando o som velho.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Assinatura {
+    tamanho: u64,
+    modificado: Option<std::time::SystemTime>,
+}
+
+impl Assinatura {
+    fn do_arquivo(caminho: &Path) -> Option<Self> {
+        let meta = std::fs::metadata(caminho).ok()?;
+        Some(Self {
+            tamanho: meta.len(),
+            modificado: meta.modified().ok(),
+        })
+    }
+}
+
 pub struct Saida {
     fluxo: Option<OutputStream>,
-    cache: Mutex<HashMap<PathBuf, Arc<Amostra>>>,
+    cache: Mutex<HashMap<PathBuf, (Assinatura, Arc<Amostra>)>>,
 }
 
 impl Saida {
@@ -100,19 +119,28 @@ impl Saida {
     }
 
     /// Decodifica o arquivo, ou devolve o que já está em memória.
+    ///
+    /// O que está em memória só vale enquanto o arquivo em disco não mudar. Sem
+    /// essa conferência, gravar um sample novo por cima do antigo deixava o pad
+    /// tocando o som velho para sempre.
     pub fn carregar(&self, caminho: &Path) -> Result<Arc<Amostra>, String> {
-        if let Some(a) = self.cache.lock().ok().and_then(|c| c.get(caminho).cloned()) {
-            return Ok(a);
+        let agora = Assinatura::do_arquivo(caminho);
+        if let Ok(c) = self.cache.lock() {
+            if let Some((assinatura, amostra)) = c.get(caminho) {
+                if agora == Some(*assinatura) {
+                    return Ok(amostra.clone());
+                }
+            }
         }
         let amostra = Arc::new(decodificar(caminho)?);
-        if let Ok(mut c) = self.cache.lock() {
-            c.insert(caminho.to_path_buf(), amostra.clone());
+        if let (Ok(mut c), Some(assinatura)) = (self.cache.lock(), agora) {
+            c.insert(caminho.to_path_buf(), (assinatura, amostra.clone()));
         }
         Ok(amostra)
     }
 
-    /// Esquece o que está em memória. A interface chama depois de gravar por
-    /// cima de um sample, senão o pad continuaria tocando o áudio antigo.
+    /// Esquece o que está em memória. O `carregar` já percebe sozinho quando o
+    /// arquivo muda; isto existe para liberar memória de um sample que saiu.
     pub fn esquecer(&self, caminho: &Path) {
         if let Ok(mut c) = self.cache.lock() {
             c.remove(caminho);
@@ -161,6 +189,36 @@ pub fn decodificar(caminho: &Path) -> Result<Amostra, String> {
         taxa,
         dados: Arc::new(dados),
     })
+}
+
+/// O desenho do som: um pico por coluna, de 0 a 1.
+///
+/// Pico e não média: a média achata tudo e um som percussivo vira uma linha
+/// reta. O que se quer ver é o contorno.
+pub fn picos(amostra: &Amostra, colunas: usize) -> Vec<f32> {
+    let colunas = colunas.clamp(1, 4000);
+    let canais = amostra.canais.max(1) as usize;
+    let quadros = amostra.dados.len() / canais;
+    if quadros == 0 {
+        return vec![0.0; colunas];
+    }
+    let mut maior = 0.0f32;
+    let saida: Vec<f32> = (0..colunas)
+        .map(|c| {
+            let de = quadros * c / colunas;
+            let ate = (quadros * (c + 1) / colunas).max(de + 1).min(quadros);
+            let pico = amostra.dados[de * canais..(ate * canais).min(amostra.dados.len())]
+                .iter()
+                .fold(0.0f32, |m, a| m.max(a.abs()));
+            maior = maior.max(pico);
+            pico
+        })
+        .collect();
+    // Normaliza pelo maior pico: um sample gravado baixo tem que aparecer.
+    if maior <= f32::EPSILON {
+        return saida;
+    }
+    saida.into_iter().map(|p| (p / maior).min(1.0)).collect()
 }
 
 /// A pasta onde ficam os samples gravados: `~/.mikrodeck/samples`.
@@ -299,6 +357,39 @@ mod testes {
     }
 
     #[test]
+    fn gravar_por_cima_troca_o_som_em_vez_de_repetir_o_antigo() {
+        // O bug: o cache guardava por caminho, e gravar um sample novo por cima
+        // mantinha o caminho. O pad continuava tocando o som velho.
+        let p = temporario("regravado");
+        wav_de_teste(&p, 800);
+        let s = Saida::nova();
+        let antigo = s.carregar(&p).unwrap();
+        assert_eq!(antigo.dados.len(), 800);
+
+        // Grava outro som no mesmo caminho, com duracao diferente.
+        // O carimbo de tempo do sistema de arquivos tem resolucao grossa, entao
+        // o tamanho diferente e o que garante a deteccao neste teste.
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        wav_de_teste(&p, 2400);
+
+        let novo = s.carregar(&p).unwrap();
+        assert_eq!(novo.dados.len(), 2400, "devolveu o audio antigo");
+        assert!(!Arc::ptr_eq(&antigo, &novo));
+        let _ = std::fs::remove_file(&p);
+    }
+
+    #[test]
+    fn arquivo_intocado_nao_e_decodificado_de_novo() {
+        let p = temporario("intocado");
+        wav_de_teste(&p, 800);
+        let s = Saida::nova();
+        let a = s.carregar(&p).unwrap();
+        let b = s.carregar(&p).unwrap();
+        assert!(Arc::ptr_eq(&a, &b), "decodificou duas vezes o mesmo arquivo");
+        let _ = std::fs::remove_file(&p);
+    }
+
+    #[test]
     fn o_cache_devolve_a_mesma_amostra_e_esquecer_limpa() {
         let p = temporario("cache");
         wav_de_teste(&p, 800);
@@ -310,6 +401,45 @@ mod testes {
         let c = s.carregar(&p).unwrap();
         assert!(!Arc::ptr_eq(&a, &c), "esquecer nao limpou o cache");
         let _ = std::fs::remove_file(&p);
+    }
+
+    #[test]
+    fn os_picos_desenham_o_contorno_do_som() {
+        // Silencio, som alto, silencio: o desenho tem que mostrar isso.
+        let mut dados = vec![0.0f32; 1000];
+        dados.extend((0..1000).map(|i| (i as f32 / 5.0).sin() * 0.5));
+        dados.extend(vec![0.0f32; 1000]);
+        let a = Amostra { canais: 1, taxa: 3000, dados: Arc::new(dados) };
+        let p = picos(&a, 30);
+        assert_eq!(p.len(), 30);
+        assert!(p[..8].iter().all(|x| *x < 0.05), "o comeco devia ser mudo");
+        assert!(p[12..18].iter().any(|x| *x > 0.9), "o meio devia ser alto");
+        assert!(p[24..].iter().all(|x| *x < 0.05), "o fim devia ser mudo");
+        assert!(p.iter().all(|x| (0.0..=1.0).contains(x)));
+    }
+
+    #[test]
+    fn um_som_baixinho_aparece_no_desenho() {
+        // Normalizado pelo maior pico, senao um sample gravado baixo viraria
+        // uma linha reta e a pessoa acharia que nao gravou nada.
+        let a = Amostra {
+            canais: 1,
+            taxa: 1000,
+            dados: Arc::new((0..1000).map(|i| (i as f32 / 5.0).sin() * 0.01).collect()),
+        };
+        let p = picos(&a, 20);
+        assert!(p.iter().any(|x| *x > 0.9), "o som baixo sumiu: {p:?}");
+    }
+
+    #[test]
+    fn os_picos_aguentam_som_curto_e_pedido_grande() {
+        // Mais colunas do que quadros: nao pode dividir por zero nem sair da faixa.
+        let a = Amostra { canais: 2, taxa: 1000, dados: Arc::new(vec![0.5; 8]) };
+        let p = picos(&a, 100);
+        assert_eq!(p.len(), 100);
+        assert!(p.iter().all(|x| x.is_finite()));
+        let vazia = Amostra { canais: 1, taxa: 1000, dados: Arc::new(vec![]) };
+        assert_eq!(picos(&vazia, 10), vec![0.0; 10]);
     }
 
     #[test]

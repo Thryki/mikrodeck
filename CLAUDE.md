@@ -338,6 +338,32 @@ som real** e pulam sozinhos numa maquina sem saida de audio.
 Falta: plugins nos samples (VST3/CLAP), que o proprio Davi deixou para bem
 depois.
 
+### Bug do sample regravado, forma de onda e reguas do envelope
+
+**O bug**: gravar um sample novo por cima do antigo e o pad continuava tocando
+o som velho. O cache da `Saida` guardava por caminho, e regravar mantem o
+caminho e troca o conteudo. Agora o cache guarda tambem **tamanho e data de
+modificacao** do arquivo, e recarrega quando qualquer um dos dois muda. Vale
+tambem para quem trocar o arquivo por fora.
+
+O bug morava no cache do `Tocador`, que vive no servico e nao morre entre um
+aperto e outro. `testar_sample` nunca falhou porque abre uma `Saida` nova a
+cada chamada, e por isso o problema so aparecia no aparelho.
+
+`tests/regravar.rs` cobre os dois caminhos. Os dois testes foram conferidos
+**reintroduzindo o bug**: com o cache antigo eles falham, com o conserto passam.
+
+**Forma de onda**: `som::picos` devolve um pico por coluna, normalizado pelo
+maior. Pico e nao media, senao um som percussivo vira linha reta; normalizado,
+senao um sample gravado baixo parece que nao gravou. `FormaDeOnda.tsx` desenha,
+e um contador de versao manda redesenhar depois de gravar, ja que o caminho do
+arquivo nao muda.
+
+**Reguas do envelope**: cada estagio virou regua de 0 a 100 mais campo em ms. A
+regua e **quadratica**: numa regua linear ate 8 s cada passo valeria 80 ms e os
+tempos curtos, que sao os que mais importam num envelope, ficariam
+inalcancaveis. Assim 25 da 500 ms e 50 da 2 s.
+
 ### A casa do Davi entrou (2026-09-05)
 
 Home Assistant ligado e provado contra o servidor de verdade. **Nem o token nem

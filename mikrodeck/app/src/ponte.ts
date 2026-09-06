@@ -198,7 +198,7 @@ export async function escolherPrograma(): Promise<string | null> {
 /** Escolhe um arquivo de audio. No navegador, devolve um caminho de mentira. */
 export async function escolherSample(): Promise<string | null> {
   if (!DENTRO_DO_TAURI) {
-    return "C:\Users\exemplo\Musica\bumbo.wav";
+    return "C:\\Users\\exemplo\\Musica\\bumbo.wav";
   }
   const { open } = await import("@tauri-apps/plugin-dialog");
   const caminho = await open({
@@ -228,14 +228,14 @@ export async function gravarSample(
   microfone: string | null,
   segundos: number,
 ): Promise<string> {
-  if (!DENTRO_DO_TAURI) return `C:\demo\${nome}.wav`;
+  if (!DENTRO_DO_TAURI) return `C:\\demo\\${nome}.wav`;
   const { invoke } = await import("@tauri-apps/api/core");
   return invoke<string>("gravar_sample", { nome, microfone, segundos });
 }
 
 /** Para a gravação e devolve o caminho do arquivo pronto. */
 export async function pararGravacao(): Promise<string> {
-  if (!DENTRO_DO_TAURI) return "C:\demo\gravado.wav";
+  if (!DENTRO_DO_TAURI) return "C:\\demo\\gravado.wav";
   const { invoke } = await import("@tauri-apps/api/core");
   return invoke<string>("parar_gravacao");
 }
@@ -271,6 +271,30 @@ export async function descobrirCasa(): Promise<CasaDescoberta> {
   }
   const { invoke } = await import("@tauri-apps/api/core");
   return invoke<CasaDescoberta>("descobrir_casa");
+}
+
+/** O desenho do som: um pico por coluna, de 0 a 1. */
+export interface FormaDeOnda {
+  picos: number[];
+  segundos: number;
+}
+
+/** Le o contorno do som para a interface desenhar. */
+export async function formaDeOnda(
+  caminho: string,
+  colunas: number,
+): Promise<FormaDeOnda> {
+  if (!DENTRO_DO_TAURI) {
+    // No navegador, um contorno de mentira so para ver o visual.
+    return {
+      picos: Array.from({ length: colunas }, (_, i) =>
+        Math.abs(Math.sin(i / 4)) * Math.exp(-i / colunas / 0.4),
+      ),
+      segundos: 1.4,
+    };
+  }
+  const { invoke } = await import("@tauri-apps/api/core");
+  return invoke<FormaDeOnda>("forma_de_onda", { caminho, colunas });
 }
 
 type Remover = () => void;

@@ -285,6 +285,23 @@ fn tempo_de_gravacao(gravacao: State<'_, GravacaoVivo>) -> f32 {
         .unwrap_or(0.0)
 }
 
+/// O desenho do som, para a interface mostrar a forma de onda.
+#[derive(Serialize)]
+struct FormaDeOnda {
+    /// Um pico por coluna, de 0 a 1.
+    picos: Vec<f32>,
+    segundos: f32,
+}
+
+#[tauri::command]
+fn forma_de_onda(caminho: String, colunas: usize) -> Result<FormaDeOnda, String> {
+    let amostra = motor::som::decodificar(std::path::Path::new(&caminho))?;
+    Ok(FormaDeOnda {
+        picos: motor::som::picos(&amostra, colunas),
+        segundos: amostra.duracao().as_secs_f32(),
+    })
+}
+
 /// Toca um sample aqui no computador, para a pessoa conferir antes de salvar.
 #[tauri::command]
 fn testar_sample(caminho: String, volume: f32) -> Result<f32, String> {
@@ -491,7 +508,8 @@ pub fn run() {
             parar_gravacao,
             tempo_de_gravacao,
             testar_sample,
-            descobrir_casa
+            descobrir_casa,
+            forma_de_onda
         ])
         .setup(|app| {
             let caminho = Config::caminho_padrao();

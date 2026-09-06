@@ -16,6 +16,7 @@ import {
   testarSample,
 } from "./ponte";
 import EnvelopeGrafico from "./EnvelopeGrafico";
+import FormaDeOnda from "./FormaDeOnda";
 import {
   ENVELOPE_PADRAO,
   nomeDoArquivo,
@@ -47,6 +48,9 @@ export default function PainelSample({ acao, nome, onMudar }: Props) {
   const [gravando, setGravando] = useState(false);
   const [segundos, setSegundos] = useState(0);
   const [recado, setRecado] = useState<string | null>(null);
+  // Sobe a cada gravação. É o que manda a forma de onda ser lida de novo: o
+  // caminho do arquivo continua o mesmo, só o conteúdo muda.
+  const [versao, setVersao] = useState(0);
   const relogio = useRef<number | null>(null);
 
   useEffect(() => {
@@ -100,6 +104,7 @@ export default function PainelSample({ acao, nome, onMudar }: Props) {
     try {
       const caminho = await pararGravacao();
       onMudar({ ...acao, caminho });
+      setVersao((v) => v + 1);
       setRecado("Gravado.");
     } catch (e) {
       setRecado(String(e));
@@ -133,19 +138,26 @@ export default function PainelSample({ acao, nome, onMudar }: Props) {
           </button>
         </div>
         {acao.caminho && (
-          <div className="mt-1 flex items-center justify-between">
-            <p className="text-xs text-neutral-500">{nomeDoArquivo(acao.caminho)}</p>
-            <button
-              onClick={() =>
-                testarSample(acao.caminho, acao.volume).catch((e) =>
-                  setRecado(String(e)),
-                )
-              }
-              className="text-xs text-sky-600 hover:underline dark:text-sky-400"
-            >
-              Ouvir
-            </button>
-          </div>
+          <>
+            <div className="mt-1 flex items-center justify-between">
+              <p className="truncate text-xs text-neutral-500">
+                {nomeDoArquivo(acao.caminho)}
+              </p>
+              <button
+                onClick={() =>
+                  testarSample(acao.caminho, acao.volume).catch((e) =>
+                    setRecado(String(e)),
+                  )
+                }
+                className="shrink-0 text-xs text-sky-600 hover:underline dark:text-sky-400"
+              >
+                Ouvir
+              </button>
+            </div>
+            <div className="mt-1">
+              <FormaDeOnda caminho={acao.caminho} versao={versao} />
+            </div>
+          </>
         )}
       </div>
 
@@ -241,61 +253,49 @@ export default function PainelSample({ acao, nome, onMudar }: Props) {
           Arraste as bolinhas. A da sustentação também sobe e desce.
         </p>
 
-        <div className="mt-3 grid grid-cols-3 gap-2">
-          <Numero
+        <div className="mt-3 space-y-2">
+          <Tempo
             rotulo="Atraso"
             valor={acao.envelope.atraso_ms}
             onMudar={(v) => mudarEnvelope({ atraso_ms: v })}
           />
-          <Numero
+          <Tempo
             rotulo="Ataque"
             valor={acao.envelope.ataque_ms}
             onMudar={(v) => mudarEnvelope({ ataque_ms: v })}
           />
-          <Numero
+          <Tempo
             rotulo="Retenção"
             valor={acao.envelope.retencao_ms}
             onMudar={(v) => mudarEnvelope({ retencao_ms: v })}
           />
-          <Numero
+          <Tempo
             rotulo="Decaimento"
             valor={acao.envelope.decaimento_ms}
             onMudar={(v) => mudarEnvelope({ decaimento_ms: v })}
           />
-          <Numero
+          <Deslizante
+            rotulo="Sustentação"
+            valor={Math.round(acao.envelope.sustentacao * 100)}
+            unidade="%"
+            onMudar={(v) => mudarEnvelope({ sustentacao: v / 100 })}
+          />
+          <Tempo
             rotulo="Liberação"
             valor={acao.envelope.liberacao_ms}
             onMudar={(v) => mudarEnvelope({ liberacao_ms: v })}
           />
-          <div>
-            <label className="mb-1 block text-xs text-neutral-600 dark:text-neutral-400">
-              Sustentação
-            </label>
-            <input
-              type="number"
-              min={0}
-              max={100}
-              value={Math.round(acao.envelope.sustentacao * 100)}
-              onChange={(e) =>
-                mudarEnvelope({
-                  sustentacao: Math.min(1, Math.max(0, Number(e.target.value) / 100)),
-                })
-              }
-              className={entrada}
-            />
-          </div>
-        </div>
-
-        <div className="mt-3 grid grid-cols-2 gap-3">
-          <Tensao
+          <Deslizante
             rotulo="Curva da subida"
-            valor={acao.envelope.tensao_ataque}
-            onMudar={(v) => mudarEnvelope({ tensao_ataque: v })}
+            valor={Math.round(acao.envelope.tensao_ataque * 100)}
+            minimo={-100}
+            onMudar={(v) => mudarEnvelope({ tensao_ataque: v / 100 })}
           />
-          <Tensao
+          <Deslizante
             rotulo="Curva da descida"
-            valor={acao.envelope.tensao_queda}
-            onMudar={(v) => mudarEnvelope({ tensao_queda: v })}
+            valor={Math.round(acao.envelope.tensao_queda * 100)}
+            minimo={-100}
+            onMudar={(v) => mudarEnvelope({ tensao_queda: v / 100 })}
           />
         </div>
 
@@ -308,7 +308,27 @@ export default function PainelSample({ acao, nome, onMudar }: Props) {
   );
 }
 
-function Tensao({
+/** Teto de um tempo do envelope, em milissegundos. */
+const MAXIMO_MS = 8000;
+
+/**
+ * O slider vai de 0 a 100, mas o tempo cresce ao quadrado.
+ *
+ * Numa régua linear até 8 segundos, cada passo valeria 80 ms e os valores
+ * curtos, que são os que mais importam num envelope, ficariam inalcançáveis.
+ * Assim 25 dá 500 ms e 50 dá 2 s, com passo fino embaixo.
+ */
+function msDoSlider(v: number): number {
+  const f = Math.min(100, Math.max(0, v)) / 100;
+  return Math.round(f * f * MAXIMO_MS);
+}
+
+function sliderDoMs(ms: number): number {
+  return Math.round(Math.sqrt(Math.min(MAXIMO_MS, Math.max(0, ms)) / MAXIMO_MS) * 100);
+}
+
+/** Um tempo do envelope: régua de 0 a 100 e o valor em milissegundos. */
+function Tempo({
   rotulo,
   valor,
   onMudar,
@@ -318,48 +338,77 @@ function Tensao({
   onMudar: (v: number) => void;
 }) {
   return (
-    <div>
-      <label className="mb-1 block text-xs text-neutral-600 dark:text-neutral-400">
+    <div className="flex items-center gap-2">
+      <label className="w-24 shrink-0 text-xs text-neutral-600 dark:text-neutral-400">
         {rotulo}
-        {Math.abs(valor) < 0.01 ? " (reta)" : ` (${valor.toFixed(2)})`}
       </label>
       <input
         type="range"
-        min={-100}
+        min={0}
         max={100}
-        value={Math.round(valor * 100)}
-        onChange={(e) => onMudar(Number(e.target.value) / 100)}
-        onDoubleClick={() => onMudar(0)}
-        title="Dois cliques voltam para a reta"
-        className="w-full"
+        value={sliderDoMs(valor)}
+        onChange={(e) => onMudar(msDoSlider(Number(e.target.value)))}
+        className="min-w-0 flex-1"
       />
+      <div className="flex shrink-0 items-center gap-1">
+        <input
+          type="number"
+          min={0}
+          max={MAXIMO_MS}
+          step={10}
+          value={valor}
+          onChange={(e) =>
+            onMudar(Math.min(MAXIMO_MS, Math.max(0, Number(e.target.value))))
+          }
+          className={`${entrada} w-20 text-right`}
+        />
+        <span className="text-xs text-neutral-500">ms</span>
+      </div>
     </div>
   );
 }
 
-function Numero({
+/** Uma régua simples, para o que já é uma porcentagem. */
+function Deslizante({
   rotulo,
   valor,
   onMudar,
+  minimo = 0,
+  unidade = "",
 }: {
   rotulo: string;
   valor: number;
   onMudar: (v: number) => void;
+  minimo?: number;
+  unidade?: string;
 }) {
   return (
-    <div>
-      <label className="mb-1 block text-xs text-neutral-600 dark:text-neutral-400">
+    <div className="flex items-center gap-2">
+      <label className="w-24 shrink-0 text-xs text-neutral-600 dark:text-neutral-400">
         {rotulo}
       </label>
       <input
-        type="number"
-        min={0}
-        max={10000}
-        step={10}
+        type="range"
+        min={minimo}
+        max={100}
         value={valor}
-        onChange={(e) => onMudar(Math.max(0, Number(e.target.value)))}
-        className={entrada}
+        onChange={(e) => onMudar(Number(e.target.value))}
+        onDoubleClick={() => onMudar(minimo < 0 ? 0 : 100)}
+        className="min-w-0 flex-1"
       />
+      <div className="flex shrink-0 items-center gap-1">
+        <input
+          type="number"
+          min={minimo}
+          max={100}
+          value={valor}
+          onChange={(e) =>
+            onMudar(Math.min(100, Math.max(minimo, Number(e.target.value))))
+          }
+          className={`${entrada} w-20 text-right`}
+        />
+        <span className="w-4 text-xs text-neutral-500">{unidade}</span>
+      </div>
     </div>
   );
 }
