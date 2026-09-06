@@ -55,3 +55,39 @@ fn adiciona_as_paginas_da_casa_na_config() {
     config.salvar(&caminho).expect("salvar");
     println!("paginas agora: {}", config.paginas.len());
 }
+
+#[test]
+#[ignore = "fala com a casa de verdade"]
+fn o_caminho_de_escrita_chega_no_home_assistant() {
+    // Prova o POST de serviço sem mexer em nada: manda "ligar" numa luz que já
+    // está ligada. O que se testa é a autenticação e o endpoint, não o efeito.
+    use std::collections::BTreeMap;
+    let config = Config::carregar_ou_criar(&Config::caminho_padrao()).expect("config");
+    let ha = &config.home_assistant;
+    let entidades = motor::rede::listar_entidades(ha).expect("listar");
+    let Some(ligada) = entidades.iter().find(|e| e.ligada && e.dominio == "light") else {
+        eprintln!("nenhuma luz ligada agora: nada a provar sem mexer na casa");
+        return;
+    };
+    // Monta a chamada pelo mesmo código que o pad usa, trocando toggle por
+    // turn_on para o estado não mudar.
+    let (url, corpo) = ha
+        .chamada(&format!("{}.toggle", ligada.dominio), &ligada.id)
+        .expect("montar a chamada");
+    let url = url.replace("/toggle", "/turn_on");
+    let mut cabecalhos = BTreeMap::new();
+    cabecalhos.insert(
+        "Authorization".to_string(),
+        format!("Bearer {}", ha.token.trim()),
+    );
+    let codigo = motor::rede::chamar(motor::rede::Metodo::Post, &url, &cabecalhos, Some(&corpo))
+        .expect("chamar o servico");
+    println!("{} -> HTTP {codigo}", ligada.nome);
+    assert_eq!(codigo, 200, "o Home Assistant recusou a chamada");
+
+    // E continua ligada, como estava antes.
+    let depois = motor::rede::listar_entidades(ha).expect("listar de novo");
+    let mesma = depois.iter().find(|e| e.id == ligada.id).expect("achar");
+    assert!(mesma.ligada, "o teste mudou o estado da casa, e nao devia");
+    println!("estado preservado: {} continua ligada", mesma.nome);
+}
