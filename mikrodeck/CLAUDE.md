@@ -338,6 +338,29 @@ som real** e pulam sozinhos numa maquina sem saida de audio.
 Falta: plugins nos samples (VST3/CLAP), que o proprio Davi deixou para bem
 depois.
 
+### A casa do Davi entrou (2026-09-05)
+
+Home Assistant ligado e provado contra o servidor de verdade. **Nem o token nem
+o endereco entram no repositorio**: eles vivem so em `~/.mikrodeck/config.json`,
+na pasta do usuario. Conferido com grep no historico inteiro do git.
+
+`tests/casa_de_verdade.rs` fala com a casa de verdade e por isso e `#[ignore]`.
+Rodar com `cargo test --test casa_de_verdade -- --ignored --nocapture`.
+
+Achados que so apareceram contra o servidor real:
+
+1. **530 entidades**, das quais 18 ligam e desligam. O filtro por dominio e o
+   descarte de `unavailable` e o que torna isso utilizavel.
+2. **18 nao cabem em 16.** Encher uma pagina e deixar 2 sobrando fica feio: as
+   paginas agora saem **equilibradas**, 9 e 9.
+3. **O corte do nome comia justamente o que distingue.** "Painel Studio Luz
+   Mesa" e "Painel Studio Luz Studio" viravam o mesmo nome. Nos ambiguos o nome
+   passa a guardar a primeira palavra e o fim: "Painel… Luz Mesa".
+4. Ambiguo e mais do que repetido: "Painel Sala Cosinha" cortado virava "Painel
+   Sala", unico mas enganoso, e ainda parecia o comeco de "Painel Sala Sala".
+   Um nome que e comeco de outro tambem conta como ambiguo.
+5. O corte deixava preposicao pendurada ("Camera Alarme de").
+
 ### Envelope como o de um plugin, e o silencio que morre sozinho
 
 Pedido do Davi com um print do envelope do FL Studio.

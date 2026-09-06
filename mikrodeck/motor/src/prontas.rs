@@ -256,13 +256,17 @@ pub fn paginas_da_casa(entidades: &[crate::rede::Entidade]) -> Vec<Pagina> {
     if entidades.is_empty() {
         return Vec::new();
     }
-    let partes: Vec<_> = entidades.chunks(16).collect();
-    let total = partes.len();
+    // Divide em páginas do mesmo tamanho em vez de encher uma e deixar o resto
+    // sobrando: dezoito dispositivos ficam 9 e 9, não 16 e 2.
+    let total = entidades.len().div_ceil(16);
+    let por_pagina = entidades.len().div_ceil(total.max(1));
+    let partes: Vec<_> = entidades.chunks(por_pagina.max(1)).collect();
     partes
         .iter()
         .enumerate()
         .map(|(i, parte)| {
             let mut pads = BTreeMap::new();
+            let nomes = nomes_curtos(parte);
             for (k, e) in parte.iter().enumerate() {
                 // Preenche de cima para baixo, na ordem que se lê: 13 a 16,
                 // depois 9 a 12, e assim por diante.
@@ -270,7 +274,7 @@ pub fn paginas_da_casa(entidades: &[crate::rede::Entidade]) -> Vec<Pagina> {
                 pads.insert(
                     pad_numero,
                     pad(
-                        &encurtar(&e.nome),
+                        &nomes[k],
                         Acao::HomeAssistant {
                             servico: e.servico_de_alternar(),
                             entidade: e.id.clone(),
@@ -313,6 +317,63 @@ fn cor_do_dominio(dominio: &str) -> Cor {
     }
 }
 
+/// Encurta os nomes e desfaz as repetições que o corte criar.
+///
+/// Cortar o fim é o que faz sentido na maioria dos casos, mas o fim costuma ser
+/// justamente o que distingue um dispositivo do irmão dele: "Painel Studio Luz
+/// Mesa" e "Painel Studio Luz Studio" viravam o mesmo "Painel Studio Luz". Nos
+/// repetidos, o nome passa a guardar a primeira palavra e o fim.
+fn nomes_curtos(entidades: &[crate::rede::Entidade]) -> Vec<String> {
+    let curtos: Vec<String> = entidades.iter().map(|e| encurtar(&e.nome)).collect();
+    // Ambíguo é mais do que repetido. "Painel Sala Cosinha" cortado vira
+    // "Painel Sala", que é único mas some com a cozinha e ainda parece o começo
+    // de "Painel Sala Sala". Um nome que é começo de outro conta como ambíguo.
+    let ambiguo = |i: usize| {
+        curtos.iter().enumerate().any(|(j, outro)| {
+            i != j && (outro.starts_with(&curtos[i]) || curtos[i].starts_with(outro))
+        })
+    };
+    curtos
+        .iter()
+        .enumerate()
+        .map(|(i, curto)| {
+            if ambiguo(i) {
+                com_o_fim(&entidades[i].nome)
+            } else {
+                curto.clone()
+            }
+        })
+        .collect()
+}
+
+/// Guarda a primeira palavra e o máximo do fim que couber, com reticências no
+/// meio. É o que separa "Painel… Luz Mesa" de "Painel… Luz Studio".
+fn com_o_fim(nome: &str) -> String {
+    const LIMITE: usize = 18;
+    let palavras: Vec<&str> = nome.split_whitespace().collect();
+    if palavras.len() < 2 {
+        return encurtar(nome);
+    }
+    let primeira = palavras[0];
+    // Cresce o sufixo palavra a palavra enquanto couber.
+    let mut sufixo = palavras[palavras.len() - 1].to_string();
+    for i in (1..palavras.len() - 1).rev() {
+        let tentativa = format!("{} {sufixo}", palavras[i]);
+        if primeira.chars().count() + 2 + tentativa.chars().count() > LIMITE {
+            break;
+        }
+        sufixo = tentativa;
+    }
+    let montado = format!("{primeira}… {sufixo}");
+    if montado.chars().count() <= LIMITE {
+        montado
+    } else {
+        // Nem a primeira palavra mais a última cabem: fica só o fim.
+        let so_o_fim: String = sufixo.chars().rev().take(LIMITE).collect::<String>().chars().rev().collect();
+        so_o_fim
+    }
+}
+
 /// A tela do aparelho é pequena e o nome do pad aparece nela. Nome comprido
 /// vira nome cortado, e cortar no espaço fica melhor do que cortar no meio da
 /// palavra.
@@ -323,9 +384,26 @@ fn encurtar(nome: &str) -> String {
         return nome.to_string();
     }
     let curto: String = nome.chars().take(LIMITE).collect();
-    match curto.rsplit_once(' ') {
+    let cortado = match curto.rsplit_once(' ') {
         Some((antes, _)) if antes.chars().count() >= 8 => antes.to_string(),
         _ => curto.trim_end().to_string(),
+    };
+    sem_palavra_solta(&cortado)
+}
+
+/// Tira a preposição ou o artigo que ficou pendurado no fim do corte.
+/// "Câmera Alarme de" fica "Câmera Alarme".
+fn sem_palavra_solta(nome: &str) -> String {
+    const SOLTAS: [&str; 10] = ["de", "da", "do", "das", "dos", "e", "em", "a", "o", "no"];
+    let mut atual = nome.trim().to_string();
+    loop {
+        let Some((antes, ultima)) = atual.rsplit_once(' ') else {
+            return atual;
+        };
+        if !SOLTAS.contains(&ultima.to_lowercase().as_str()) || antes.trim().is_empty() {
+            return atual;
+        }
+        atual = antes.trim_end().to_string();
     }
 }
 
@@ -440,15 +518,107 @@ mod testes {
             .collect();
         let p = paginas_da_casa(&e);
         assert_eq!(p.len(), 2, "cortou dispositivo em vez de abrir pagina");
-        assert_eq!(p[0].pads.len(), 16);
-        assert_eq!(p[1].pads.len(), 4);
         assert_eq!(p[0].nome, "Casa 1");
         assert_eq!(p[1].nome, "Casa 2");
+        assert_eq!(
+            p[0].pads.len() + p[1].pads.len(),
+            20,
+            "perdeu dispositivo no caminho"
+        );
+    }
+
+    #[test]
+    fn as_paginas_saem_equilibradas_em_vez_de_deixar_sobra() {
+        // Dezoito dispositivos: 9 e 9 fica melhor que 16 e 2.
+        let e: Vec<_> = (0..18)
+            .map(|i| ent(&format!("light.l{i}"), &format!("Luz {i}")))
+            .collect();
+        let p = paginas_da_casa(&e);
+        assert_eq!(p.len(), 2);
+        assert_eq!(p[0].pads.len(), 9);
+        assert_eq!(p[1].pads.len(), 9);
+    }
+
+    #[test]
+    fn nenhuma_pagina_passa_de_dezesseis_pads() {
+        for quantos in 1..=100usize {
+            let e: Vec<_> = (0..quantos)
+                .map(|i| ent(&format!("light.l{i}"), &format!("Luz {i}")))
+                .collect();
+            let paginas = paginas_da_casa(&e);
+            let soma: usize = paginas.iter().map(|p| p.pads.len()).sum();
+            assert_eq!(soma, quantos, "perdeu dispositivo com {quantos}");
+            for p in &paginas {
+                assert!(
+                    p.pads.len() <= 16,
+                    "{} pads numa pagina com {quantos} dispositivos",
+                    p.pads.len()
+                );
+                assert!(p.pads.len() > 0, "pagina vazia com {quantos}");
+            }
+        }
     }
 
     #[test]
     fn sem_dispositivo_nenhum_nao_cria_pagina_vazia() {
         assert!(paginas_da_casa(&[]).is_empty());
+    }
+
+    #[test]
+    fn o_corte_nao_deixa_preposicao_pendurada() {
+        assert_eq!(encurtar("Câmera Alarme de movimento"), "Câmera Alarme");
+        assert_eq!(encurtar("Câmera Modo de privacidade"), "Câmera Modo");
+        // Palavra solta no meio do nome nao e mexida.
+        assert_eq!(encurtar("Luz da sala"), "Luz da sala");
+    }
+
+    #[test]
+    fn nomes_que_se_repetem_depois_do_corte_ganham_o_fim() {
+        // Sem isto, os dois viravam "Painel Studio Luz" e o pad ficava adivinha.
+        let e = vec![
+            ent("switch.a", "Painel Studio Luz Mesa"),
+            ent("switch.b", "Painel Studio Luz Studio"),
+            ent("switch.c", "Banheiro"),
+        ];
+        let nomes = nomes_curtos(&e);
+        assert_ne!(nomes[0], nomes[1], "dois pads com o mesmo nome: {nomes:?}");
+        assert!(nomes[0].contains("Mesa"), "{:?}", nomes[0]);
+        assert!(nomes[1].contains("Studio"), "{:?}", nomes[1]);
+        // Quem nao repetia continua como estava.
+        assert_eq!(nomes[2], "Banheiro");
+        for n in &nomes {
+            assert!(n.chars().count() <= 18, "{n} passou do limite");
+        }
+    }
+
+    #[test]
+    fn nome_cortado_que_vira_comeco_de_outro_tambem_e_desfeito() {
+        // "Painel Sala Cosinha" cortado virava "Painel Sala", que e unico mas
+        // engole a cozinha e parece o comeco de "Painel Sala Sala".
+        let e = vec![
+            ent("switch.a", "Painel Sala Cosinha"),
+            ent("switch.b", "Painel Sala Sala"),
+        ];
+        let nomes = nomes_curtos(&e);
+        assert!(nomes[0].contains("Cosinha"), "{:?}", nomes[0]);
+        assert_ne!(nomes[0], nomes[1]);
+        assert!(!nomes[1].starts_with(&nomes[0]), "{nomes:?}");
+        for n in &nomes {
+            assert!(n.chars().count() <= 18, "{n} passou do limite");
+        }
+    }
+
+    #[test]
+    fn o_roteador_tambem_fica_distinguivel() {
+        let e = vec![
+            ent("switch.a", "Primary router Guest network"),
+            ent("switch.b", "Primary router WiFi 6 TWT"),
+        ];
+        let nomes = nomes_curtos(&e);
+        assert_ne!(nomes[0], nomes[1], "{nomes:?}");
+        for n in &nomes {
+            assert!(n.chars().count() <= 18, "{n} passou do limite");
+        }
     }
 
     #[test]
