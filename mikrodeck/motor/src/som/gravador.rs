@@ -59,6 +59,8 @@ fn achar(nome: Option<&str>) -> Result<cpal::Device, String> {
 pub struct Gravacao {
     parar: Arc<AtomicBool>,
     quadros: Arc<AtomicU32>,
+    /// Quantos quadros a gravação pode ter. Passando disso ela fecha sozinha.
+    limite: u32,
     taxa: u32,
     caminho: PathBuf,
     /// Avisa quando a thread terminou de fechar o arquivo.
@@ -119,6 +121,7 @@ impl Gravacao {
         Ok(Self {
             parar,
             quadros,
+            limite: taxa.saturating_mul(segundos),
             taxa,
             caminho: caminho.to_path_buf(),
             fim: Some(fim),
@@ -131,11 +134,13 @@ impl Gravacao {
     }
 
     /// Se a thread já fechou o arquivo, por limite de tempo ou por `parar`.
+    ///
+    /// Não olha o canal: `try_recv` consumiria o resultado que o `parar`
+    /// precisa ler depois, e o `parar` acabaria dizendo que a gravação morreu
+    /// sem motivo. O contador de quadros responde a mesma pergunta sem
+    /// estragar nada.
     pub fn terminou(&self) -> bool {
-        self.fim
-            .as_ref()
-            .map(|f| matches!(f.try_recv(), Err(mpsc::TryRecvError::Disconnected)))
-            .unwrap_or(true)
+        self.quadros.load(Ordering::Relaxed) >= self.limite
     }
 
     /// Para, espera o arquivo fechar e apara o silêncio das pontas.
@@ -453,6 +458,28 @@ mod testes {
         w.finalize().unwrap();
         assert_eq!(aparar_silencio(&caminho).unwrap(), Duration::ZERO);
         assert_eq!(hound::WavReader::open(&caminho).unwrap().duration(), 8000);
+        let _ = std::fs::remove_file(&caminho);
+    }
+
+    #[test]
+    fn parar_uma_gravacao_ja_terminada_ainda_devolve_o_arquivo() {
+        // `terminou` olhava o canal com try_recv e comia o resultado que o
+        // `parar` ia ler, e o `parar` respondia "morreu sem dizer o porque".
+        let caminho = std::env::temp_dir().join("mikrodeck-teste-terminou.wav");
+        let _ = std::fs::remove_file(&caminho);
+        let Ok(g) = Gravacao::comecar(None, &caminho, 1) else {
+            eprintln!("sem microfone: teste pulado");
+            return;
+        };
+        // Espera a gravacao fechar sozinha no limite de um segundo.
+        let inicio = std::time::Instant::now();
+        while !g.terminou() && inicio.elapsed() < Duration::from_secs(5) {
+            std::thread::sleep(Duration::from_millis(50));
+        }
+        assert!(g.terminou(), "nao fechou sozinha no limite");
+        let devolvido = g.parar().expect("parar depois de terminada");
+        assert_eq!(devolvido, caminho);
+        assert!(caminho.exists(), "o arquivo nao ficou no disco");
         let _ = std::fs::remove_file(&caminho);
     }
 

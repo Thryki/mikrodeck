@@ -297,6 +297,13 @@ export async function formaDeOnda(
   return invoke<FormaDeOnda>("forma_de_onda", { caminho, colunas });
 }
 
+/** Cala a previa que estiver tocando. */
+export async function pararPrevia(): Promise<void> {
+  if (!DENTRO_DO_TAURI) return;
+  const { invoke } = await import("@tauri-apps/api/core");
+  await invoke("parar_previa");
+}
+
 type Remover = () => void;
 
 /** Assina um evento do motor. No navegador, não faz nada. */

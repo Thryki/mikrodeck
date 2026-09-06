@@ -12,6 +12,7 @@ import {
   gravarSample,
   microfones as lerMicrofones,
   pararGravacao,
+  pararPrevia,
   tempoDeGravacao,
   testarSample,
 } from "./ponte";
@@ -143,16 +144,24 @@ export default function PainelSample({ acao, nome, onMudar }: Props) {
               <p className="truncate text-xs text-neutral-500">
                 {nomeDoArquivo(acao.caminho)}
               </p>
-              <button
-                onClick={() =>
-                  testarSample(acao.caminho, acao.volume).catch((e) =>
-                    setRecado(String(e)),
-                  )
-                }
-                className="shrink-0 text-xs text-sky-600 hover:underline dark:text-sky-400"
-              >
-                Ouvir
-              </button>
+              <div className="flex shrink-0 gap-3">
+                <button
+                  onClick={() =>
+                    testarSample(acao.caminho, acao.volume).catch((e) =>
+                      setRecado(String(e)),
+                    )
+                  }
+                  className="text-xs text-sky-600 hover:underline dark:text-sky-400"
+                >
+                  Ouvir
+                </button>
+                <button
+                  onClick={() => pararPrevia().catch(console.error)}
+                  className="text-xs text-neutral-500 hover:underline"
+                >
+                  Parar
+                </button>
+              </div>
             </div>
             <div className="mt-1">
               <FormaDeOnda caminho={acao.caminho} versao={versao} />

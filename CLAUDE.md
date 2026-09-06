@@ -338,6 +338,44 @@ som real** e pulam sozinhos numa maquina sem saida de audio.
 Falta: plugins nos samples (VST3/CLAP), que o proprio Davi deixou para bem
 depois.
 
+### Revisao do audio (2026-09-06)
+
+O uso mudou de figura: **streamer disparando sample na live e musico fazendo
+beat ao vivo**. Isso poe latencia e estalo em primeiro lugar.
+
+**O clique ao apertar rapido.** `Sink::stop()` corta a onda no meio, e degrau em
+audio e estalo. Redisparar um pad matava a voz anterior desse jeito. Agora a voz
+substituida sai com rampa de 10 ms (`Voz::cortar_suave`, que marca a bandeira e
+faz `detach` para a rampa terminar depois de a `Voz` morrer). Alem disso toda
+voz tem rampa antiestalo de 3 ms na entrada e na saida, porque sample raramente
+comeca e acaba no zero da onda. Medido por teste: **nenhum degrau maior que
+0,05** entre amostras vizinhas, com sinal constante em 1, que e o pior caso.
+
+**Quatro bugs achados na revisao:**
+
+1. O `Tocador` nascia dentro de `laco_de_eventos`, que roda a cada reconexao.
+   Religar o cabo reabria a placa de som e jogava fora o cache de samples. Ele
+   agora nasce uma vez, no supervisor.
+2. `Gravacao::terminou()` usava `try_recv` e **comia** o resultado que o `parar`
+   ia ler; o `parar` respondia "morreu sem dizer o porque". Agora olha o
+   contador de quadros.
+3. Uma gravacao que batia o limite e fechava sozinha continuava guardada, e
+   quem nao clicasse em "Parar" a tempo ficava impedido de gravar de novo.
+4. `testar_sample` dormia ate 30 s segurando uma thread, sem jeito de parar. A
+   saida agora fica no estado do app, e existe um botao "Parar".
+
+**Latencia.** O sample so era decodificado no primeiro aperto, justamente o que
+nao pode atrasar numa live. `Tocador::preparar` carrega os samples da config
+numa thread, no inicio e sempre que a lista muda.
+
+**Teto de 5 minutos** por sample: o arquivo inteiro vira f32 na memoria, e cinco
+minutos de estereo a 48 kHz ja sao uns 230 MB. A leitura para no teto mais um,
+para nao carregar um arquivo de uma hora antes de reclamar.
+
+**Pagina pronta "Samples"**: dezesseis pads ja com acao de som e sem arquivo,
+uma cor por fileira (numa live nao da tempo de ler o nome) e a fileira de baixo
+no modo "enquanto apertado", que e como se usa loop e efeito longo.
+
 ### Bug do sample regravado, forma de onda e reguas do envelope
 
 **O bug**: gravar um sample novo por cima do antigo e o pad continuava tocando

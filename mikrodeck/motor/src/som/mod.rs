@@ -50,6 +50,7 @@ impl Amostra {
 pub struct Voz {
     sink: Sink,
     solto: Arc<AtomicBool>,
+    corte: Arc<AtomicBool>,
 }
 
 impl Voz {
@@ -58,7 +59,18 @@ impl Voz {
         self.solto.store(true, Ordering::Relaxed);
     }
 
-    /// Corta na hora, sem liberação. É o que o "pausar" e o fechar usam.
+    /// Tira esta voz de cena com uma rampa de 10 ms e a deixa terminar sozinha.
+    ///
+    /// É o que o redisparo usa. Parar o `Sink` na hora corta a onda no meio, e
+    /// isso é um estalo: era o clique que aparecia ao apertar o pad rápido.
+    /// O `detach` é o que deixa a rampa acontecer depois de a `Voz` morrer.
+    pub fn cortar_suave(self) {
+        self.corte.store(true, Ordering::Relaxed);
+        self.sink.detach();
+    }
+
+    /// Corta na hora, sem rampa nenhuma. Só para quando o som tem que sumir
+    /// mesmo, como ao fechar o programa.
     pub fn cortar(&self) {
         self.sink.stop();
     }
@@ -94,7 +106,37 @@ impl Assinatura {
 
 pub struct Saida {
     fluxo: Option<OutputStream>,
-    cache: Mutex<HashMap<PathBuf, (Assinatura, Arc<Amostra>)>>,
+    cache: Arc<Cache>,
+}
+
+/// O cache dos arquivos decodificados, separado da saída para poder ser
+/// emprestado à thread que prepara os samples.
+#[derive(Default)]
+pub struct Cache(Mutex<HashMap<PathBuf, (Assinatura, Arc<Amostra>)>>);
+
+impl Cache {
+    /// Decodifica o arquivo, ou devolve o que já está em memória.
+    pub fn carregar(&self, caminho: &Path) -> Result<Arc<Amostra>, String> {
+        let agora = Assinatura::do_arquivo(caminho);
+        if let Ok(c) = self.0.lock() {
+            if let Some((assinatura, amostra)) = c.get(caminho) {
+                if agora == Some(*assinatura) {
+                    return Ok(amostra.clone());
+                }
+            }
+        }
+        let amostra = Arc::new(decodificar(caminho)?);
+        if let (Ok(mut c), Some(assinatura)) = (self.0.lock(), agora) {
+            c.insert(caminho.to_path_buf(), (assinatura, amostra.clone()));
+        }
+        Ok(amostra)
+    }
+
+    pub fn esquecer(&self, caminho: &Path) {
+        if let Ok(mut c) = self.0.lock() {
+            c.remove(caminho);
+        }
+    }
 }
 
 impl Saida {
@@ -109,8 +151,14 @@ impl Saida {
         };
         Self {
             fluxo,
-            cache: Mutex::new(HashMap::new()),
+            cache: Arc::new(Cache::default()),
         }
+    }
+
+    /// Uma alça só para o cache, para preparar samples numa thread sem levar a
+    /// placa de som junto.
+    fn para_preparar(&self) -> Option<Arc<Cache>> {
+        Some(self.cache.clone())
     }
 
     /// Se a placa de som abriu.
@@ -124,27 +172,13 @@ impl Saida {
     /// essa conferência, gravar um sample novo por cima do antigo deixava o pad
     /// tocando o som velho para sempre.
     pub fn carregar(&self, caminho: &Path) -> Result<Arc<Amostra>, String> {
-        let agora = Assinatura::do_arquivo(caminho);
-        if let Ok(c) = self.cache.lock() {
-            if let Some((assinatura, amostra)) = c.get(caminho) {
-                if agora == Some(*assinatura) {
-                    return Ok(amostra.clone());
-                }
-            }
-        }
-        let amostra = Arc::new(decodificar(caminho)?);
-        if let (Ok(mut c), Some(assinatura)) = (self.cache.lock(), agora) {
-            c.insert(caminho.to_path_buf(), (assinatura, amostra.clone()));
-        }
-        Ok(amostra)
+        self.cache.carregar(caminho)
     }
 
     /// Esquece o que está em memória. O `carregar` já percebe sozinho quando o
     /// arquivo muda; isto existe para liberar memória de um sample que saiu.
     pub fn esquecer(&self, caminho: &Path) {
-        if let Ok(mut c) = self.cache.lock() {
-            c.remove(caminho);
-        }
+        self.cache.esquecer(caminho);
     }
 
     /// Toca o arquivo. `volume` é de 0 a 1.
@@ -162,10 +196,16 @@ impl Saida {
             amostra.dados.as_slice(),
         );
         let solto = Arc::new(AtomicBool::new(false));
+        let corte = Arc::new(AtomicBool::new(false));
         let sink = Sink::connect_new(fluxo.mixer());
         sink.set_volume(volume.clamp(0.0, 1.0));
-        sink.append(ComEnvelope::novo(fonte, envelope, solto.clone()));
-        Ok(Voz { sink, solto })
+        sink.append(ComEnvelope::com_corte(
+            fonte,
+            envelope,
+            solto.clone(),
+            corte.clone(),
+        ));
+        Ok(Voz { sink, solto, corte })
     }
 }
 
@@ -173,6 +213,13 @@ impl Saida {
 ///
 /// O `symphonia` por trás do rodio cobre wav, mp3, flac, ogg, m4a e aac. O que
 /// ele não abrir vira erro com o nome do arquivo, para a interface mostrar.
+/// Teto de duração de um sample, em minutos.
+///
+/// O arquivo inteiro vira `f32` na memória para o aperto do pad não tocar no
+/// disco. Cinco minutos de estéreo a 48 kHz já são uns 230 MB; acima disso o
+/// custo deixa de fazer sentido para um pad.
+pub const MINUTOS_MAXIMOS: u64 = 5;
+
 pub fn decodificar(caminho: &Path) -> Result<Amostra, String> {
     let arquivo = std::fs::File::open(caminho)
         .map_err(|e| format!("nao consegui abrir {}: {e}", caminho.display()))?;
@@ -180,9 +227,18 @@ pub fn decodificar(caminho: &Path) -> Result<Amostra, String> {
         .map_err(|e| format!("nao consegui ler o audio de {}: {e}", caminho.display()))?;
     let canais = fonte.channels().max(1);
     let taxa = fonte.sample_rate().max(1);
-    let dados: Vec<f32> = fonte.collect();
+    let teto = MINUTOS_MAXIMOS as usize * 60 * taxa as usize * canais as usize;
+    // Lê no máximo um a mais que o teto: assim dá para saber que passou sem
+    // carregar um arquivo de uma hora inteiro na memória antes de reclamar.
+    let dados: Vec<f32> = fonte.take(teto + 1).collect();
     if dados.is_empty() {
         return Err(format!("{} nao tem audio nenhum", caminho.display()));
+    }
+    if dados.len() > teto {
+        return Err(format!(
+            "{} passa de {MINUTOS_MAXIMOS} minutos; corte o trecho que você quer usar",
+            caminho.display()
+        ));
     }
     Ok(Amostra {
         canais,
@@ -265,11 +321,33 @@ impl Tocador {
         modo: ModoDisparo,
     ) -> Result<(), String> {
         if let Some((antiga, _)) = self.vozes.remove(&pad) {
-            antiga.cortar();
+            antiga.cortar_suave();
         }
         let voz = self.saida.tocar(caminho, volume, envelope)?;
         self.vozes.insert(pad, (voz, modo));
         Ok(())
+    }
+
+    /// Deixa estes samples prontos na memória, sem travar quem chamou.
+    ///
+    /// O primeiro aperto de um pad ia ao disco e decodificava ali, e num show
+    /// ou numa live é justamente o primeiro que não pode atrasar. A leitura
+    /// acontece numa thread e o cache é compartilhado, então quando o dedo
+    /// chegar no pad o som já está pronto.
+    pub fn preparar(&self, caminhos: Vec<PathBuf>) {
+        let Some(saida) = self.saida.para_preparar() else {
+            return;
+        };
+        std::thread::Builder::new()
+            .name("mikrodeck-samples".into())
+            .spawn(move || {
+                for caminho in caminhos {
+                    if let Err(e) = saida.carregar(&caminho) {
+                        eprintln!("nao consegui preparar {}: {e}", caminho.display());
+                    }
+                }
+            })
+            .ok();
     }
 
     /// O pad foi solto. Só entra na liberação quem está no modo segurando; o
@@ -287,7 +365,7 @@ impl Tocador {
     /// um Maschine comum, e som nenhum sobra tocando.
     pub fn cortar_tudo(&mut self) {
         for (_, (voz, _)) in self.vozes.drain() {
-            voz.cortar();
+            voz.cortar_suave();
         }
     }
 

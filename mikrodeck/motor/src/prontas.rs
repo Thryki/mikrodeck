@@ -27,6 +27,7 @@ pub fn catalogo() -> Vec<Pronta> {
         pronta("trabalho", "Trabalho", "Copiar, colar, desfazer, print da tela e as janelas virtuais do Windows."),
         pronta("navegador", "Navegador", "Abas, histórico, downloads, zoom e tela cheia do navegador."),
         pronta("windows", "Windows", "Encaixar janelas, trocar de app, gravar a tela e a área de transferência."),
+        pronta("samples", "Samples", "Dezesseis pads prontos para receber som: escolha o arquivo ou grave pelo microfone."),
     ]
 }
 
@@ -47,6 +48,7 @@ pub fn montar(id: &str) -> Option<Pagina> {
         "trabalho" => Some(trabalho()),
         "navegador" => Some(navegador()),
         "windows" => Some(windows()),
+        "samples" => Some(samples()),
         _ => None,
     }
 }
@@ -407,6 +409,47 @@ fn sem_palavra_solta(nome: &str) -> String {
     }
 }
 
+/// Uma página de samples, para quem toca ao vivo.
+///
+/// Os pads já vêm com a ação de som e sem arquivo: a pessoa clica no pad e
+/// escolhe, ou grava ali mesmo. As quatro fileiras têm cores diferentes porque
+/// numa live não dá tempo de ler o nome; a cor é o que se acha com o olho.
+///
+/// A fileira de baixo vem no modo "enquanto apertado", que é como se usa um
+/// loop ou um efeito longo. As outras são one-shot, como bateria.
+fn samples() -> Pagina {
+    use crate::som::ModoDisparo;
+    let mut pads = BTreeMap::new();
+    let fileiras = [
+        ([13, 14, 15, 16], Cor::Vermelho, ModoDisparo::AteOFim),
+        ([9, 10, 11, 12], Cor::Laranja, ModoDisparo::AteOFim),
+        ([5, 6, 7, 8], Cor::Violeta, ModoDisparo::AteOFim),
+        ([1, 2, 3, 4], Cor::Ciano, ModoDisparo::Segurando),
+    ];
+    for (numeros, cor, modo) in fileiras {
+        for pad_numero in numeros {
+            pads.insert(
+                pad_numero,
+                pad(
+                    &format!("Som {pad_numero}"),
+                    Acao::Sample {
+                        caminho: String::new(),
+                        modo,
+                        volume: 1.0,
+                        envelope: crate::som::envelope::Envelope::default(),
+                    },
+                    cor,
+                ),
+            );
+        }
+    }
+    Pagina {
+        nome: "Samples".into(),
+        pads,
+        botoes: BTreeMap::new(),
+    }
+}
+
 fn pad(nome: &str, acao: Acao, cor: Cor) -> Controle {
     Controle {
         nome: nome.into(),
@@ -637,6 +680,35 @@ mod testes {
         let mut vistos: Vec<u8> = ORDEM_DE_LEITURA.to_vec();
         vistos.sort();
         assert_eq!(vistos, (1..=16).collect::<Vec<u8>>());
+    }
+
+    #[test]
+    fn a_pagina_de_samples_vem_com_os_dezesseis_pads_prontos() {
+        let p = montar("samples").unwrap();
+        assert_eq!(p.pads.len(), 16);
+        for (numero, controle) in &p.pads {
+            let Acao::Sample { caminho, modo, volume, .. } = &controle.acao else {
+                panic!("pad {numero} nao e de som");
+            };
+            assert!(caminho.is_empty(), "pad {numero} veio com arquivo");
+            assert_eq!(*volume, 1.0);
+            // So a fileira de baixo toca enquanto esta apertado.
+            let esperado = if (1..=4).contains(numero) {
+                crate::som::ModoDisparo::Segurando
+            } else {
+                crate::som::ModoDisparo::AteOFim
+            };
+            assert_eq!(*modo, esperado, "modo errado no pad {numero}");
+        }
+    }
+
+    #[test]
+    fn as_fileiras_de_samples_tem_cores_diferentes() {
+        // Numa live nao da tempo de ler o nome; a cor e o que se acha.
+        let p = montar("samples").unwrap();
+        let cores: std::collections::HashSet<Cor> =
+            [13u8, 9, 5, 1].iter().map(|n| p.pads[n].cor).collect();
+        assert_eq!(cores.len(), 4, "duas fileiras com a mesma cor");
     }
 
     #[test]

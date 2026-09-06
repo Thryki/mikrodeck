@@ -18,6 +18,10 @@ struct MotorVivo(Mutex<Option<Servico>>);
 /// A gravação em curso, se houver. Uma por vez: duas disputariam o microfone.
 struct GravacaoVivo(Mutex<Option<motor::som::gravador::Gravacao>>);
 
+/// A saída e a voz do botão "Ouvir". A saída é aberta na primeira prévia e fica
+/// viva: abrir a placa de som a cada clique custa caro e atrasa o som.
+struct PreviaVivo(Mutex<(Option<motor::som::Saida>, Option<motor::som::Voz>)>);
+
 /// Situação do aparelho, no formato que a UI entende.
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "snake_case")]
@@ -248,6 +252,14 @@ fn gravar_sample(
     gravacao: State<'_, GravacaoVivo>,
 ) -> Result<String, String> {
     let mut guarda = gravacao.0.lock().map_err(|e| e.to_string())?;
+    // Uma gravação que bateu o limite e fechou sozinha continua guardada aqui.
+    // Sem esta limpeza, quem não clicasse em "Parar" a tempo ficava impedido de
+    // gravar de novo, com um "já tem uma gravação em curso" que não era verdade.
+    if guarda.as_ref().map(|g| g.terminou()).unwrap_or(false) {
+        if let Some(antiga) = guarda.take() {
+            let _ = antiga.parar();
+        }
+    }
     if guarda.is_some() {
         return Err("já tem uma gravação em curso".into());
     }
@@ -303,25 +315,40 @@ fn forma_de_onda(caminho: String, colunas: usize) -> Result<FormaDeOnda, String>
 }
 
 /// Toca um sample aqui no computador, para a pessoa conferir antes de salvar.
+///
+/// A saída fica guardada no estado do app. Antes ela nascia e morria dentro
+/// desta função, e por isso ela precisava dormir até o sample acabar, segurando
+/// uma thread e sem jeito de parar no meio.
 #[tauri::command]
-fn testar_sample(caminho: String, volume: f32) -> Result<f32, String> {
-    let saida = motor::som::Saida::nova();
-    let duracao = saida
-        .carregar(std::path::Path::new(&caminho))?
-        .duracao()
-        .as_secs_f32();
+fn testar_sample(
+    caminho: String,
+    volume: f32,
+    previa: State<'_, PreviaVivo>,
+) -> Result<f32, String> {
+    let mut guarda = previa.0.lock().map_err(|e| e.to_string())?;
+    let saida = guarda.0.get_or_insert_with(motor::som::Saida::nova);
+    let caminho = std::path::PathBuf::from(caminho);
+    let duracao = saida.carregar(&caminho)?.duracao().as_secs_f32();
     let voz = saida.tocar(
-        std::path::Path::new(&caminho),
+        &caminho,
         volume,
         motor::som::envelope::Envelope::default(),
     )?;
-    // A saída morre no fim desta função e levaria o som junto, então espera o
-    // sample acabar. O teto de 30 s impede de travar a interface num arquivo longo.
-    let limite = std::time::Instant::now();
-    while !voz.acabou() && limite.elapsed().as_secs() < 30 {
-        std::thread::sleep(std::time::Duration::from_millis(30));
+    // Ouvir de novo troca a prévia em vez de somar uma em cima da outra.
+    if let Some(anterior) = guarda.1.replace(voz) {
+        anterior.cortar_suave();
     }
     Ok(duracao)
+}
+
+/// Cala a prévia que estiver tocando.
+#[tauri::command]
+fn parar_previa(previa: State<'_, PreviaVivo>) -> Result<(), String> {
+    let mut guarda = previa.0.lock().map_err(|e| e.to_string())?;
+    if let Some(voz) = guarda.1.take() {
+        voz.cortar_suave();
+    }
+    Ok(())
 }
 
 /// Páginas prontas que a pessoa pode adicionar com um clique.
@@ -487,6 +514,7 @@ pub fn run() {
         ))
         .manage(MotorVivo(Mutex::new(None)))
         .manage(GravacaoVivo(Mutex::new(None)))
+        .manage(PreviaVivo(Mutex::new((None, None))))
         .invoke_handler(tauri::generate_handler![
             ler_config,
             salvar_config,
@@ -509,7 +537,8 @@ pub fn run() {
             tempo_de_gravacao,
             testar_sample,
             descobrir_casa,
-            forma_de_onda
+            forma_de_onda,
+            parar_previa
         ])
         .setup(|app| {
             let caminho = Config::caminho_padrao();

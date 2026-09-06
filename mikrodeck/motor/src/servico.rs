@@ -82,6 +82,11 @@ impl Servico {
                     // O volume abre uma vez só: abrir a cada toque na strip
                     // custaria caro e travaria o laço.
                     let volume = Volume::abrir();
+                    // O tocador também. Ele carrega a placa de som e o cache
+                    // dos samples decodificados: nascendo dentro do laço, cada
+                    // religada de cabo reabriria a placa e jogaria o cache
+                    // fora, e o primeiro toque de cada pad voltaria ao disco.
+                    let mut tocador = crate::som::Tocador::novo();
                     while rodando.load(Ordering::Relaxed) {
                         match Aparelho::abrir(30) {
                             Ok((aparelho, eventos)) => {
@@ -97,6 +102,7 @@ impl Servico {
                                     &descanso_pedido,
                                     volume.as_ref(),
                                     &abertos,
+                                    &mut tocador,
                                     avisar.as_ref(),
                                 );
                                 *situacao.lock().unwrap_or_else(|e| e.into_inner()) = Situacao::Procurando;
@@ -181,6 +187,10 @@ fn laco_de_eventos<F>(
     descanso_pedido: &Arc<AtomicBool>,
     volume: Option<&Volume>,
     abertos: &Abertos,
+    // Os samples tocando, um por pad. Vem de fora porque soltar o pad precisa
+    // alcançar a mesma voz que o aperto começou, e porque a placa de som e o
+    // cache não podem morrer quando o cabo do aparelho cai.
+    tocador: &mut crate::som::Tocador,
     avisar: &F,
 ) where
     F: Fn(Aviso) + Send + Sync + ?Sized,
@@ -192,9 +202,10 @@ fn laco_de_eventos<F>(
     };
     // Quantos tiques rápidos já passaram, para ler o volume a cada quatro.
     let mut tiques_rapidos: u32 = 0;
-    // Os samples tocando, um por pad. Fica aqui, e não na thread de ações,
-    // porque soltar o pad precisa alcançar a mesma voz que o aperto começou.
-    let mut tocador = crate::som::Tocador::novo();
+
+    // Deixa os samples da config prontos na memória antes de alguém apertar.
+    let mut samples_prontos = samples_da_config(estado);
+    tocador.preparar(samples_prontos.clone());
 
     // Pinta o estado inicial assim que conecta.
     repintar(aparelho, estado, abertos, None, false);
@@ -244,6 +255,13 @@ fn laco_de_eventos<F>(
                     animador.configurar(e.config().descanso.luz, e.config().ao_apertar);
                     (e.config().brilho, e.quadro_de_repouso(abertos))
                 };
+                // Trocou de sample pela interface ou pelo MCP: o novo entra na
+                // memória agora, não no primeiro aperto.
+                let samples_agora = samples_da_config(estado);
+                if samples_agora != samples_prontos {
+                    tocador.preparar(samples_agora.clone());
+                    samples_prontos = samples_agora;
+                }
                 let dormindo = compositor.dormindo() && !pausado;
                 animador.tique(Instant::now(), dormindo, brilho, &repouso, None);
                 // Repinta mesmo sem evento: a config pode ter mudado pela interface
@@ -704,6 +722,22 @@ fn atualizar_tela(aparelho: &Aparelho, compositor: &mut Compositor, pausado: boo
 /// Apaga a tela do aparelho. Usado ao desligar o MikroDeck.
 fn apagar_tela(aparelho: &Aparelho) {
     aparelho.desenhar(|tela| tela.limpar());
+}
+
+/// Todo caminho de sample que aparece na config, sem repetir.
+fn samples_da_config(estado: &Arc<Mutex<Estado>>) -> Vec<std::path::PathBuf> {
+    let e = travar(estado);
+    let mut vistos = std::collections::BTreeSet::new();
+    for pagina in &e.config().paginas {
+        for controle in pagina.pads.values().chain(pagina.botoes.values()) {
+            if let Acao::Sample { caminho, .. } = &controle.acao {
+                if !caminho.trim().is_empty() {
+                    vistos.insert(std::path::PathBuf::from(caminho));
+                }
+            }
+        }
+    }
+    vistos.into_iter().collect()
 }
 
 fn repintar(

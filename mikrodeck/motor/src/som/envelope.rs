@@ -132,6 +132,21 @@ impl Envelope {
     }
 }
 
+/// Rampa contra estalo, em milissegundos.
+///
+/// Um sample raramente começa e acaba no zero da onda. Sem uma rampa, o salto
+/// de zero para o meio da onda é um degrau, e degrau em áudio é estalo. Três
+/// milissegundos são curtos demais para mudar o ataque que a pessoa ouve e
+/// longos o bastante para matar o estalo.
+pub const ANTIESTALO_MS: f32 = 3.0;
+
+/// Quanto dura o corte suave de uma voz que foi substituída.
+///
+/// Apertar o mesmo pad de novo mata a voz anterior. Matar no meio da onda dá
+/// estalo, que era o clique que aparecia ao apertar rápido. Dez milissegundos
+/// somem no meio do som novo.
+pub const CORTE_MS: f32 = 10.0;
+
 /// Uma fonte com o envelope aplicado. `solto` é compartilhado com quem tocou:
 /// levantar a bandeira faz o som entrar na liberação e terminar sozinho.
 pub struct ComEnvelope<S> {
@@ -148,6 +163,13 @@ pub struct ComEnvelope<S> {
     solto: Arc<AtomicBool>,
     /// Quadro em que o pad foi solto, e o ganho naquele instante.
     solto_em: Option<(u64, f32)>,
+    /// Pedido de corte suave: a voz foi substituída e tem que sair de cena.
+    corte: Arc<AtomicBool>,
+    /// Quadro em que o corte foi pedido, e o ganho naquele instante.
+    corte_em: Option<(u64, f32)>,
+    /// Quantos quadros o áudio tem, quando dá para saber. Serve para a rampa
+    /// do fim: sem ela, um sample que acaba no meio da onda estala.
+    total: Option<u64>,
 }
 
 impl<S> ComEnvelope<S>
@@ -155,8 +177,20 @@ where
     S: rodio::Source,
 {
     pub fn novo(fonte: S, envelope: Envelope, solto: Arc<AtomicBool>) -> Self {
+        Self::com_corte(fonte, envelope, solto, Arc::new(AtomicBool::new(false)))
+    }
+
+    pub fn com_corte(
+        fonte: S,
+        envelope: Envelope,
+        solto: Arc<AtomicBool>,
+        corte: Arc<AtomicBool>,
+    ) -> Self {
         let taxa = fonte.sample_rate().max(1);
         let canais = fonte.channels().max(1);
+        let total = fonte
+            .total_duration()
+            .map(|d| (d.as_secs_f64() * taxa as f64).round() as u64);
         Self {
             fonte,
             envelope,
@@ -167,7 +201,24 @@ where
             ganho: 0.0,
             solto,
             solto_em: None,
+            corte,
+            corte_em: None,
+            total,
         }
+    }
+
+    /// A rampa das pontas: sobe nos primeiros milissegundos e desce nos
+    /// últimos. Devolve 1 no meio do som, que é quase sempre.
+    fn antiestalo(&self, quadro: u64) -> f32 {
+        let janela = (ANTIESTALO_MS / 1000.0 * self.taxa as f32).max(1.0);
+        let entrada = (quadro as f32 / janela).min(1.0);
+        let saida = match self.total {
+            Some(total) if total > 0 => {
+                ((total.saturating_sub(quadro)) as f32 / janela).min(1.0)
+            }
+            _ => 1.0,
+        };
+        entrada.min(saida)
     }
 
     fn instante(&self, quadro: u64) -> Duration {
@@ -180,7 +231,7 @@ where
         if self.solto_em.is_none() && self.solto.load(Ordering::Relaxed) {
             self.solto_em = Some((self.quadro, segurando));
         }
-        match self.solto_em {
+        let do_envelope = match self.solto_em {
             None => Some(segurando),
             Some((quadro_do_solto, nivel)) => {
                 let desde = self.instante(self.quadro.saturating_sub(quadro_do_solto));
@@ -190,7 +241,25 @@ where
                     Some(self.envelope.ganho_soltando(nivel, desde))
                 }
             }
+        }?;
+
+        // O corte suave ganha do envelope: ele existe para tirar esta voz de
+        // cena depressa, sem estalo, quando outra tomou o lugar dela.
+        if self.corte_em.is_none() && self.corte.load(Ordering::Relaxed) {
+            self.corte_em = Some((self.quadro, do_envelope));
         }
+        let ganho = match self.corte_em {
+            None => do_envelope,
+            Some((quadro_do_corte, nivel)) => {
+                let ms = self.instante(self.quadro.saturating_sub(quadro_do_corte)).as_secs_f32()
+                    * 1000.0;
+                if ms >= CORTE_MS {
+                    return None;
+                }
+                (nivel * (1.0 - ms / CORTE_MS)).min(do_envelope)
+            }
+        };
+        Some(ganho * self.antiestalo(self.quadro))
     }
 }
 
@@ -381,14 +450,129 @@ mod testes {
             ..Envelope::default()
         };
         let mut com = ComEnvelope::novo(fonte, e, solto.clone());
-        // 100 quadros com o pad apertado: ganho cheio.
-        for _ in 0..100 {
-            assert_eq!(com.next(), Some(1.0));
-        }
+        // 100 quadros com o pad apertado. Os primeiros milissegundos sobem pela
+        // rampa antiestalo; depois dela o ganho e cheio.
+        let inicio: Vec<f32> = (0..100).map(|_| com.next().unwrap()).collect();
+        assert!(inicio[0] < 0.5, "a rampa devia comecar baixo: {}", inicio[0]);
+        assert!(
+            inicio[50..].iter().all(|g| (*g - 1.0).abs() < 0.001),
+            "depois da rampa o ganho devia ser cheio"
+        );
         solto.store(true, Ordering::Relaxed);
         // A liberacao dura 100 ms, que a 1000 Hz sao 100 quadros.
         let restantes = com.count();
         assert_eq!(restantes, 100, "a liberacao devia durar 100 quadros");
+    }
+
+    /// O maior salto entre duas amostras vizinhas. Estalo e degrau: se nenhum
+    /// passo e grande, nao ha estalo.
+    fn maior_degrau(v: &[f32]) -> f32 {
+        v.windows(2).fold(0.0f32, |m, p| m.max((p[1] - p[0]).abs()))
+    }
+
+    /// Sinal constante em 1: o pior caso possivel para estalo, porque qualquer
+    /// corte seco vira um degrau de 1 inteiro.
+    fn constante(quadros: usize) -> rodio::buffer::SamplesBuffer {
+        rodio::buffer::SamplesBuffer::new(1, 48000, vec![1.0f32; quadros])
+    }
+
+    #[test]
+    fn o_som_entra_e_sai_sem_degrau() {
+        // Com ataque zero, sem a rampa antiestalo a primeira amostra saltaria
+        // de nada para 1, e a ultima de 1 para nada.
+        let com = ComEnvelope::novo(
+            constante(48000),
+            Envelope::default(),
+            Arc::new(AtomicBool::new(false)),
+        );
+        let saida: Vec<f32> = com.collect();
+        assert!(!saida.is_empty());
+        assert!(saida[0].abs() < 0.05, "comecou em {}", saida[0]);
+        assert!(
+            saida[saida.len() - 1].abs() < 0.2,
+            "acabou em {}",
+            saida[saida.len() - 1]
+        );
+        assert!(saida.iter().any(|a| *a > 0.99), "o meio devia estar cheio");
+        assert!(
+            maior_degrau(&saida) < 0.05,
+            "degrau de {} no som",
+            maior_degrau(&saida)
+        );
+    }
+
+    #[test]
+    fn o_corte_suave_desce_ate_zero_em_vez_de_estalar() {
+        // Era o clique do Davi: apertar o pad de novo matava a voz anterior no
+        // meio da onda.
+        let corte = Arc::new(AtomicBool::new(false));
+        let mut com = ComEnvelope::com_corte(
+            constante(48000),
+            Envelope::default(),
+            Arc::new(AtomicBool::new(false)),
+            corte.clone(),
+        );
+        let mut saida: Vec<f32> = Vec::new();
+        for _ in 0..4800 {
+            saida.push(com.next().unwrap());
+        }
+        corte.store(true, Ordering::Relaxed);
+        let cauda: Vec<f32> = com.collect();
+
+        // Dez milissegundos a 48 kHz sao 480 quadros, com folga de um.
+        assert!(
+            (470..=490).contains(&cauda.len()),
+            "a rampa do corte durou {} quadros",
+            cauda.len()
+        );
+        assert!(cauda[0] > 0.9, "a rampa devia comecar de onde estava");
+        assert!(
+            *cauda.last().unwrap() < 0.05,
+            "acabou em {}",
+            cauda.last().unwrap()
+        );
+        saida.extend(cauda);
+        assert!(
+            maior_degrau(&saida) < 0.05,
+            "degrau de {} no corte",
+            maior_degrau(&saida)
+        );
+    }
+
+    #[test]
+    fn o_corte_suave_nunca_aumenta_o_volume() {
+        // Cortar uma voz que ja estava baixa nao pode levantar ela de volta.
+        let corte = Arc::new(AtomicBool::new(false));
+        let envelope = Envelope {
+            ataque_ms: 0,
+            decaimento_ms: 100,
+            sustentacao: 0.2,
+            ..Envelope::default()
+        };
+        let mut com = ComEnvelope::com_corte(
+            constante(48000),
+            envelope,
+            Arc::new(AtomicBool::new(false)),
+            corte.clone(),
+        );
+        for _ in 0..24000 {
+            com.next();
+        }
+        let antes = com.next().unwrap();
+        corte.store(true, Ordering::Relaxed);
+        let cauda: Vec<f32> = com.collect();
+        assert!(cauda[0] <= antes + 0.01, "{} subiu para {}", antes, cauda[0]);
+    }
+
+    #[test]
+    fn a_rampa_antiestalo_nao_engole_o_ataque_configurado() {
+        // Tres milissegundos nao podem virar o ataque de quem pediu 500 ms.
+        let e = Envelope { ataque_ms: 500, ..Envelope::default() };
+        let com = ComEnvelope::novo(constante(48000), e, Arc::new(AtomicBool::new(false)));
+        let saida: Vec<f32> = com.collect();
+        // No meio do ataque configurado o ganho tem que estar no meio, nao no topo.
+        let meio = saida[48000 / 4];
+        assert!((meio - 0.5).abs() < 0.05, "ganho {meio} no meio do ataque");
     }
 
     #[test]
