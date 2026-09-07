@@ -396,7 +396,7 @@ descanso na primeira versão; se subir, é aqui que se corta.
 |---|---|
 | `frame_nao_suja_ao_voltar_ao_valor_enviado` | Escrever A, B, A deixa o frame limpo. |
 | `orcamento_de_escritas` | Para cada modo × ritmo × B, simula 10 s de tiques de 25 ms com relógio falso e conta quadros distintos. Falha se passar de 8 por segundo. Veio das duas outras propostas. Todo modo novo entra aqui antes de entrar no aparelho. |
-| `contorno_segue_a_lista_do_davi` | A cabeça passa por 1, 5, 9, 13, 14, 15, 16, 12, 8, 4, 3, 2, 6, 10, 11, 7, nessa ordem. |
+| `contorno_segue_a_ordem_pedida` | A cabeça passa por 1, 5, 9, 13, 14, 15, 16, 12, 8, 4, 3, 2, 6, 10, 11, 7, nessa ordem. |
 | `colunas_vai_e_volta_sem_salto` | 1, 2, 3, 4, 3, 2, 1. |
 | `respiracao_mantem_vazios_apagados_e_nunca_apaga_os_cheios` | Vale é fraco, não apagado. |
 | `respiracao_rapida_cai_no_laco` | Toda duração no rápido é múltiplo de 25 ms. |

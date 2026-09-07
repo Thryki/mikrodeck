@@ -4,6 +4,9 @@ version = "1.0.0"
 description = "MikroDeck — o Maschine Mikro MK3 como Stream Deck"
 authors = ["Thryki"]
 edition = "2021"
+license = "GPL-3.0-only"
+authors = ["Thryki <davireis@proton.me>"]
+repository = "https://github.com/Thryki/mikrodeck"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

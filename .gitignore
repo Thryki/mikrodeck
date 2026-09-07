@@ -6,7 +6,8 @@ node_modules/
 mikrodeck/app/dist/
 
 # Binário do MCP copiado para dentro do bundle do app
-mikrodeck/app/src-tauri/binarios/
+mikrodeck/app/src-tauri/binarios/*
+!mikrodeck/app/src-tauri/binarios/.gitkeep
 
 # Capturas e trabalho de bancada
 scripts/node_modules/

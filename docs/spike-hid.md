@@ -435,7 +435,7 @@ O que ainda **não** funciona: os LEDs. O report `0x80` é aceito sem erro e ign
 |---|---|---|
 | `0xd0` | config | `d0 01 00 00 17 0a 50 ff...` — brilho global de LED já em 10, o máximo. `0x50` = 80 num campo de 0 a 100. |
 | `0xd8` | info, só leitura | contém o PID `0x1700` e o serial curto do aparelho |
-| `0xd9` | serial em texto | `24 caracteres, um por aparelho` |
+| `0xd9` | serial em texto | 24 caracteres, um por aparelho |
 | `0xf8` | tela | `f8 80 00 20 00 01 00 00 00 64 00` — os `80 00` e `20 00` são 128 e 32, as dimensões da tela |
 
 Os campos graváveis do `0xf8` aceitam `SET_REPORT` mas não mudam: relendo, voltam iguais.

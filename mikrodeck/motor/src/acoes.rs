@@ -190,11 +190,15 @@ fn executar(acao: &Acao, casa: &HomeAssistant) -> std::io::Result<()> {
             }
         }
         Acao::AbrirUrl { url } => {
-            // `start` é interno do cmd, por isso precisa do cmd na frente.
-            // O par de aspas vazias é o título da janela, que o `start` exige
-            // quando o argumento seguinte vem entre aspas.
-            Command::new("cmd")
-                .args(["/C", "start", "", &completar_url(url)])
+            // Pelo Explorer, e não pelo `cmd /C start`.
+            //
+            // O `cmd` trata `&` como separador de comando, e o `Command` do
+            // Rust só põe aspas em argumento que tenha espaço. Resultado: uma
+            // URL comum de YouTube, `...?v=abc&list=xyz`, abria só até o `&` e
+            // o resto virava comando do shell. O Explorer recebe o argumento
+            // inteiro e não reparseia nada.
+            Command::new("explorer.exe")
+                .arg(completar_url(url))
                 .spawn()?;
             Ok(())
         }
@@ -292,13 +296,35 @@ fn precisa_do_shell(caminho: &str) -> bool {
 /// Abre pelo shell do Windows, que resolve atalho, associação de tipo e nome curto.
 /// O par de aspas vazias é o título da janela, que o `start` exige quando o
 /// argumento seguinte vem entre aspas.
+/// Abre pelo Explorer, que é quem sabe abrir atalho, documento e app da loja.
+///
+/// Não usa `cmd /C start` pelo mesmo motivo da URL: o `cmd` quebraria o
+/// argumento no `&`, e um caminho como `C:\Tools\AT&Tpp.lnk` viraria dois
+/// comandos. O Explorer recebe o caminho inteiro.
+///
+/// Argumentos para o programa não passam por aqui: o Explorer não os repassa.
+/// Quem tem argumento vai pelo `Command` direto, no ramo de cima.
 fn abrir_pelo_shell(caminho: &str, argumentos: &[String]) -> std::io::Result<()> {
     use std::process::Command;
+    if argumentos.is_empty() {
+        Command::new("explorer.exe").arg(caminho.trim()).spawn()?;
+        return Ok(());
+    }
+    // Com argumentos, o jeito é o `start` do shell mesmo. Aspas em volta de
+    // cada parte impedem o `cmd` de reparsear `&` e companhia.
     let mut cmd = Command::new("cmd");
-    cmd.args(["/C", "start", "", caminho]);
-    cmd.args(argumentos);
+    cmd.args(["/C", "start", "", &aspas(caminho)]);
+    for a in argumentos {
+        cmd.arg(aspas(a));
+    }
     cmd.spawn()?;
     Ok(())
+}
+
+/// Envolve em aspas para o `cmd` não reparsear o conteúdo. Aspas de dentro são
+/// removidas: elas fechariam a nossa e devolveriam o controle ao shell.
+fn aspas(valor: &str) -> String {
+    format!("\"{}\"", valor.trim().replace('"', ""))
 }
 
 impl TeclaMidia {
@@ -540,6 +566,39 @@ mod testes_url {
     #[test]
     fn vazio_continua_vazio() {
         assert_eq!(completar_url("   "), "");
+    }
+}
+
+#[cfg(test)]
+mod testes_shell {
+    use super::aspas;
+
+    #[test]
+    fn as_aspas_impedem_o_shell_de_reparsear() {
+        // O `cmd` trata `&` como separador de comando. Sem as aspas, um caminho
+        // com `&` viraria dois comandos, e o segundo rodaria de verdade.
+        let caminho = r"C:\Tools\AT&T\app.lnk";
+        let entre_aspas = aspas(caminho);
+        assert!(entre_aspas.starts_with('"') && entre_aspas.ends_with('"'));
+        assert!(entre_aspas.contains("AT&T"), "perdeu o & : {entre_aspas}");
+        assert_eq!(entre_aspas.len(), caminho.len() + 2);
+    }
+
+    #[test]
+    fn aspas_de_dentro_somem_para_nao_fechar_as_nossas() {
+        // Uma aspa no meio fecharia a nossa e devolveria o resto ao shell.
+        let com_aspas = aspas(r#"a" & whoami & "b"#);
+        assert_eq!(com_aspas.matches('"').count(), 2, "{com_aspas}");
+        assert!(com_aspas.starts_with('"') && com_aspas.ends_with('"'));
+    }
+
+    #[test]
+    fn a_url_do_youtube_com_e_comercial_fica_inteira() {
+        // Era o bug: `...?v=abc&list=xyz` abria so ate o `&`, e o resto virava
+        // comando. Agora a URL vai pelo Explorer, num argumento so.
+        let url = super::completar_url("youtube.com/watch?v=abc&list=xyz");
+        assert_eq!(url, "https://youtube.com/watch?v=abc&list=xyz");
+        assert!(url.contains("&list=xyz"), "a URL perdeu o rabo: {url}");
     }
 }
 

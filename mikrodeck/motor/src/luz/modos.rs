@@ -245,7 +245,7 @@ mod testes {
     }
 
     #[test]
-    fn contorno_segue_a_lista_do_davi() {
+    fn contorno_segue_a_ordem_pedida() {
         // A cabeça (o único pad no brilho máximo) passa pela lista na ordem.
         for (passo, esperado) in CONTORNO.iter().enumerate() {
             let q = contorno(passo as f32, 2, None);

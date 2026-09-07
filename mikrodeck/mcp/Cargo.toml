@@ -2,6 +2,9 @@
 name = "mikrodeck-mcp"
 version = "1.0.0"
 edition = "2021"
+license = "GPL-3.0-only"
+authors = ["Thryki <davireis@proton.me>"]
+repository = "https://github.com/Thryki/mikrodeck"
 description = "Servidor MCP do MikroDeck: configurar pads por linguagem natural"
 
 [[bin]]

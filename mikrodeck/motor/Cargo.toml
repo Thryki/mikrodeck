@@ -2,6 +2,9 @@
 name = "motor"
 version = "1.0.0"
 edition = "2024"
+license = "GPL-3.0-only"
+authors = ["Thryki <davireis@proton.me>"]
+repository = "https://github.com/Thryki/mikrodeck"
 
 [lib]
 name = "motor"

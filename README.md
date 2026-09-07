@@ -10,11 +10,11 @@
   <img src="https://img.shields.io/badge/app-Tauri%202-24C8D8?logo=tauri&logoColor=white" alt="Tauri 2">
   <img src="https://img.shields.io/badge/HID-puro%2C%20sem%20driver-E8590C" alt="HID puro, sem driver">
   <img src="https://img.shields.io/badge/MCP-embutido-8A2BE2" alt="MCP embutido">
-  <img src="https://img.shields.io/badge/testes-140%20passando-2ea44f" alt="140 testes">
-  <img src="https://img.shields.io/badge/vers%C3%A3o-0.1.0-blue" alt="versão 0.1.0">
+  <img src="https://img.shields.io/badge/testes-234%20passando-2ea44f" alt="234 testes">
+  <img src="https://img.shields.io/badge/vers%C3%A3o-1.0.0-blue" alt="versão 1.0.0">
 </p>
 
-> **English summary.** MikroDeck turns the Native Instruments Maschine Mikro MK3 into a Stream Deck style macro controller on Windows: 16 RGB pads per page, unlimited pages, all 39 buttons, knob, touch strip and the 128x32 screen, driven over raw HID with no NI driver in the loop. One physical button switches MikroDeck off and the unit goes back to being a plain Maschine for music. A built-in MCP server lets any MCP capable assistant configure the pads in plain language. The reverse engineered protocol, verified on real hardware, is in [docs/maschine-mikro-mk3-hid-protocol.md](docs/maschine-mikro-mk3-hid-protocol.md). Windows only. Version 0.1.0; prebuilt binaries arrive with 1.1, build from source until then.
+> **English summary.** MikroDeck turns the Native Instruments Maschine Mikro MK3 into a Stream Deck style macro controller on Windows: 16 RGB pads per page, unlimited pages, all 39 buttons, knob, touch strip and the 128x32 screen, driven over raw HID with no NI driver in the loop. One physical button switches MikroDeck off and the unit goes back to being a plain Maschine for music. A built-in MCP server lets any MCP capable assistant configure the pads in plain language. The reverse engineered protocol, verified on real hardware, is in [docs/maschine-mikro-mk3-hid-protocol.md](docs/maschine-mikro-mk3-hid-protocol.md). Windows only. Version 1.0.0; installers on the [releases page](https://github.com/Thryki/mikrodeck/releases).
 
 <p align="center">
   <img src="docs/imagens/tela-principal.png" alt="Janela principal do MikroDeck: barra de status, abas de páginas, desenho do aparelho com pads coloridos e painel lateral" width="900">
@@ -34,11 +34,12 @@
 8. [A configuração é um arquivo](#a-configuração-é-um-arquivo)
 9. [Antes de começar: um passo, uma vez só](#antes-de-começar-um-passo-uma-vez-só)
 10. [Por baixo do capô](#por-baixo-do-capô)
-11. [Estado do projeto](#estado-do-projeto)
-12. [Rodar do código](#rodar-do-código)
-13. [Perguntas frequentes](#perguntas-frequentes)
-14. [Como ajudar](#como-ajudar)
-15. [Créditos](#créditos)
+11. [Apoie o projeto](#apoie-o-projeto)
+12. [Estado do projeto](#estado-do-projeto)
+13. [Rodar do código](#rodar-do-código)
+14. [Perguntas frequentes](#perguntas-frequentes)
+15. [Como ajudar](#como-ajudar)
+16. [Créditos](#créditos)
 
 ---
 
@@ -180,8 +181,8 @@ Opção por pad, para programa e para link. Um pad vira o controle completo daqu
 | Gesto | Programa | Link |
 |---|---|---|
 | Toque | Abre, ou traz para a frente. Já na frente, minimiza | Abre, ou vai para a janela do site |
-| Toque duplo (menos de 350 ms) | Maximiza ou restaura | Maximiza ou restaura |
-| Segurar (700 ms) | Fecha o programa | Abre outra janela do link |
+| Toque duplo (menos de 350 ms) | Fecha o programa | Maximiza ou restaura |
+| Segurar (700 ms) | Maximiza, e desmaximiza se já estiver | Abre outra janela do link |
 
 ### Interface e bandeja
 
@@ -211,6 +212,7 @@ Opção por pad, para programa e para link. Um pad vira o controle completo daqu
 | Ligar e desligar o MikroDeck | Pausar e retomar |
 | Home Assistant | Serviço `dominio.servico` + entidade, por exemplo `light.toggle` em `light.sala` |
 | Requisição HTTP | GET, POST, PUT, cabeçalhos e corpo. Cobre webhook e qualquer serviço que aceite uma chamada |
+| Tocar um som | Um sample no pad: arquivo escolhido ou gravado pelo microfone, com envelope e volume próprios |
 | Nada | Pad decorativo ou vazio |
 
 ### Páginas prontas
@@ -219,8 +221,13 @@ Opção por pad, para programa e para link. Um pad vira o controle completo daqu
 |---|---|
 | **Spotify** | Controle de mídia. Usa os botões físicos PLAY, STOP, RESTART e TAP |
 | **Claude** | Atalhos para o dia a dia com o Claude |
-| **Casa** | Exemplos de Home Assistant |
+| **Casa** | Exemplos de Home Assistant, para trocar pelas suas entidades |
 | **Trabalho** | Copiar, colar, desfazer, print, áreas de trabalho, bloquear |
+| **Navegador** | Abas, histórico, downloads, zoom e tela cheia |
+| **Windows** | Encaixar janelas, trocar de app, gravar a tela, área de transferência, emoji |
+| **Samples** | Dezesseis pads prontos para receber som, uma cor por fileira |
+
+E há sempre a opção **Vazia**, que cria uma página em branco.
 
 ### Casa e web
 
@@ -353,7 +360,7 @@ Regras que valem para sempre:
 - **Uma escrita por tique.** O frame de LED vai na frente, e as duas metades da tela vão espaçadas em 12 ms.
 - **A touch strip como medidor vive no mesmo frame de LED.** Custo extra de escrita: zero.
 - **Por fora, pad é o número impresso no aparelho** (1 a 16). A ordem bruta fica escondida no `hid`.
-- **Testável sem aparelho.** Estado, compositor da tela e animador de luz têm testes próprios: **125 no motor e 15 no MCP**, todos passando.
+- **Testável sem aparelho.** Estado, compositor da tela e animador de luz têm testes próprios: **219 no motor e 15 no MCP**, todos passando.
 - **Interface sem aparelho.** `npm run dev` abre a interface num navegador comum, com dados de demonstração. É assim que os prints deste README são tirados.
 
 Mais em [docs/arquitetura.md](docs/arquitetura.md).
@@ -380,7 +387,7 @@ Windows funcionou, ou mandar uma página pronta que você montou.
 |---|---|
 | Versão | **1.0.0**, a primeira estável |
 | Plataforma | Só Windows (SendInput, Core Audio, EnumWindows, HID do Windows) |
-| Testes | 209 no motor, 15 no MCP, todos passando |
+| Testes | 219 no motor, 15 no MCP, todos passando |
 | Download | Instalador e MSI na [página de releases](https://github.com/Thryki/mikrodeck/releases) |
 | Licença | GPL-3.0 |
 
@@ -488,7 +495,8 @@ Configurações, Restaurar configuração de exemplo. A antiga vira `.bak`.
 Não. Só Windows por enquanto.
 
 **Tem instalador?**
-Na 1.1. Por enquanto roda do código.
+Tem, na [página de releases](https://github.com/Thryki/mikrodeck/releases): um
+`.exe` de instalação e um `.msi`. Também dá para compilar do código.
 
 ---
 
@@ -515,8 +523,18 @@ E deixe uma estrela. Ajuda o projeto a chegar em quem tem o mesmo aparelho parad
 
 ## Créditos
 
-- [pymikro](https://github.com/flokapi/pymikro): implementação em Python do Mikro MK3, o mapa que guiou a reescrita em Rust.
-- [Notas de engenharia reversa da família MK3](https://gist.github.com/ktemkin/89253ecf10c5078f47607776564de83b), de ktemkin.
+- [pymikro](https://github.com/flokapi/pymikro), de flokapi, licença **LGPL-2.1**:
+  implementação em Python do Mikro MK3, o mapa que guiou a reescrita em Rust.
+  Nenhuma linha foi copiada; o que veio de lá foi o entendimento dos pacotes,
+  e cada byte foi reconfirmado no aparelho. A LGPL-2.1 permite passar para a
+  GPL-3.0, então não há conflito com a licença deste projeto.
+- [Notas de engenharia reversa da família MK3](https://gist.github.com/ktemkin/89253ecf10c5078f47607776564de83b),
+  de ktemkin: um gist sem licença declarada, usado como referência de formato.
+
+Tudo que este repositório afirma sobre o protocolo foi verificado no aparelho
+físico, e o que foi verificado está em
+[docs/spike-hid.md](docs/spike-hid.md) e em
+[docs/maschine-mikro-mk3-hid-protocol.md](docs/maschine-mikro-mk3-hid-protocol.md).
 
 Maschine e Native Instruments são marcas dos seus donos. Este projeto não tem ligação com a Native Instruments.
 

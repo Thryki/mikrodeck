@@ -1,0 +1,9 @@
+Esta pasta guarda o mikrodeck-mcp.exe que vai dentro do instalador.
+
+O binário não entra no repositório: ele é gerado por
+`cd mikrodeck/mcp && cargo build --release` e copiado para cá.
+Sem ele o app compila e roda igual; só o servidor MCP não vai junto no
+instalador.
+
+Este arquivo existe para a pasta sobreviver ao git, porque o `tauri.conf.json`
+declara a pasta como recurso do pacote. Sem ela, um clone limpo não compila.
