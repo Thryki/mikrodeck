@@ -40,6 +40,17 @@
     "licenseFile": "../../../LICENSE",
     "resources": {
       "binarios": ""
+    },
+    "windows": {
+      "nsis": {
+        "headerImage": "instalador/cabecalho.bmp",
+        "sidebarImage": "instalador/lateral.bmp",
+        "installerIcon": "icons/icon.ico"
+      },
+      "wix": {
+        "bannerPath": "instalador/faixa.bmp",
+        "dialogImagePath": "instalador/abertura.bmp"
+      }
     }
   }
 }
